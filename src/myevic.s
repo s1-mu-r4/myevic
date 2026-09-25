@@ -122,6 +122,7 @@ Stack_Top:
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global Reset_Handler
+		.thumb_func
 
 Reset_Handler:
 		LDR		R0, =0x40000100	@ SYS_REGLCTL
@@ -208,6 +209,7 @@ Startup:				@ ...
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global	MemCpy
+		.thumb_func
 
 MemCpy:
 		ORR.W	R3, R0,	R1
@@ -242,6 +244,7 @@ loc_20E:
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global MemSet2
+		.thumb_func
 
 MemSet2:
 		UXTB	R2, R2
@@ -262,6 +265,7 @@ loc_21C:
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global MemClear
+		.thumb_func
 
 MemClear:
 		MOVS	R2, #0
@@ -276,6 +280,7 @@ MemClear:
 @ void *__fastcall MemSet(void *, char,	unsigned int)
 
 		.global MemSet
+		.thumb_func
 
 MemSet:
 		PUSH	{R4,LR}
@@ -293,6 +298,7 @@ MemSet:
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global MemCpy2
+		.thumb_func
 
 MemCpy2:
 		B	loc_8A7A
@@ -313,6 +319,7 @@ loc_8A7A:				@ ...
 @ =============== S U B	R O U T	I N E =======================================
 
 		.global MemClear2
+		.thumb_func
 
 MemClear2:
 		MOVS	R0, #0
@@ -332,9 +339,16 @@ loc_8A8A:				@ ...
 
 @ ===========================================================================
 
-		.section	.myevic
+		.section	.myevic,"ax",%progbits
+
+@ A .section switch RESETS the assembler's instruction-set mode, so the
+@ ".code 16" up in .text does NOT carry over here. Without this, everything
+@ below assembles as ARM on a Thumb-only Cortex-M4, and the linker rejects it
+@ with "Unknown destination type (ARM/Thumb)" / "dangerous relocation".
+		.code 16
 
 		.global	DrawHexDigit
+		.thumb_func
 
 DrawHexDigit:
 		and		r2, #0xF
@@ -346,6 +360,7 @@ DrawHexDigit:
 		b		DrawImage
 
 		.global	DrawHexDigit2
+		.thumb_func
 
 DrawHexDigit2:
 		and		r2, #0xF
@@ -358,6 +373,7 @@ DrawHexDigit2:
 		b		DrawImage
 
 		.global	DrawHexLong
+		.thumb_func
 
 DrawHexLong:
 		push	{r4-r8,lr}
@@ -410,6 +426,7 @@ UsageFault_Handler:
 @ ul sqrtul( ul )
 
 		.global	sqrtul
+		.thumb_func
 
 sqrtul:
 		fmsr	s0, r0
@@ -422,6 +439,7 @@ sqrtul:
 @ ---------------------------------------------------------------------------
 @
 		.global	GetFirmwareSize
+		.thumb_func
 
 GetFirmwareSize:
 		ldr		r2, =RAMInitTable

@@ -150,15 +150,37 @@ INCDIRS += -I$(ARMGCC)/arm-none-eabi/include
 
 GCC_VERSION := $(shell arm-none-eabi-gcc -dumpversion)
 
-LIBDIRS := -L$(ARMGCC)/arm-none-eabi/lib \
+# Ask the compiler which multilib variant our -mcpu/-mfpu/-mthumb flags select
+# (e.g. "thumb/v7e-m/nofp") instead of hardcoding it. Older toolchains laid the
+# libs out as a bare "thumb" subdir; current ones nest by arch and FPU.
+MULTIDIR := $(shell arm-none-eabi-gcc -mcpu=$(CPU) -mfpu=$(FPU) -mthumb -print-multi-directory)
+
+# Both $(ARMGCC)/lib/gcc/... (current) and $(ARMGCC)/gcc/... (older layout) are
+# listed so this works across toolchain packagings; a nonexistent -L is harmless.
+# ORDER MATTERS: ld takes the first match across -L in order, and the base
+# directories also contain a libc.a/libgcc.a built for ARM (not Thumb). Listing
+# them first yields "Unknown destination type (ARM/Thumb)" / "dangerous
+# relocation" at link. The multilib directories must therefore come FIRST.
+LIBDIRS := -L$(ARMGCC)/arm-none-eabi/lib/$(MULTIDIR) \
+	-L$(ARMGCC)/arm-none-eabi/newlib/$(MULTIDIR) \
+	-L$(ARMGCC)/lib/gcc/arm-none-eabi/$(GCC_VERSION)/$(MULTIDIR) \
+	-L$(ARMGCC)/gcc/arm-none-eabi/$(GCC_VERSION)/$(MULTIDIR) \
+	-L$(ARMGCC)/arm-none-eabi/lib \
 	-L$(ARMGCC)/arm-none-eabi/newlib \
-	-L$(ARMGCC)/arm-none-eabi/newlib/thumb \
-	-L$(ARMGCC)/gcc/arm-none-eabi/$(GCC_VERSION) \
-	-L$(ARMGCC)/gcc/arm-none-eabi/$(GCC_VERSION)/thumb
+	-L$(ARMGCC)/lib/gcc/arm-none-eabi/$(GCC_VERSION) \
+	-L$(ARMGCC)/gcc/arm-none-eabi/$(GCC_VERSION)
 
 CFLAGS += -Wall -mcpu=$(CPU) -mfpu=$(FPU) -mthumb -Os -fdata-sections -ffunction-sections -std=c99
 CFLAGS += -fno-builtin-printf
+# GCC 10 flipped the default to -fno-common, which turns this codebase's
+# tentative definitions (e.g. NewMillis in both atomizer.c and eh.c) into
+# duplicate-symbol link errors. Pre-GCC-10 they merged into ONE common symbol,
+# which is the behaviour the code was written against, so restore it rather
+# than refactor 2017 code we have not tested yet. Worth cleaning up later by
+# giving each such variable a single definition plus an extern declaration.
+CFLAGS += -fcommon
 CFLAGS += $(INCDIRS)
+
 
 ASFLAGS := -mcpu=$(CPU) -mfpu=$(FPU)
 ASFLAGS += $(INCDIRS)
@@ -167,7 +189,12 @@ LINKSCRIPT := linker.ld
 
 LDFLAGS += -u __aeabi_uldivmod
 LDFLAGS += $(LIBDIRS)
-LDFLAGS += -gc-sections -nostdlib -nostartfiles -T$(LINKSCRIPT)
+# We invoke `ld` directly, not the gcc driver. -nostartfiles is a gcc DRIVER
+# option that ld never had; older binutils silently tolerated it, but >= 2.40
+# rejects it ("unable to disambiguate: -nostartfiles"). It was always a no-op
+# here anyway: with -nostdlib, an explicit linker script and an explicit object
+# list, no startfiles are pulled in. Dropped.
+LDFLAGS += --gc-sections -nostdlib -T$(LINKSCRIPT)
 #LDFLAGS += --verbose --cref -Map=blah.map
 
 SRCDIR   = src
@@ -192,7 +219,12 @@ $(OBJS_FIXPATH): %.o: %.c
 $(TARGET)_dec.bin: $(OBJS_FIXPATH) $(MYEVIC_OBJS)
 	test -d $(OUTDIR) || mkdir $(OUTDIR)
 	$(LD) --start-group $(LIBS) $(OBJS_FIXPATH) $(MYEVIC_OBJS) --end-group $(LDFLAGS) -o $(OUTDIR)/$(TARGET).elf
-	$(OBJCOPY) -O binary -j .text -j .data $(OUTDIR)/$(TARGET).elf $(OUTDIR)/$(TARGET)_dec.bin
+# .raminit MUST be listed here. It carries RAMInitTable, which the startup code
+# reads to copy .data from ROM into RAM and to zero .bss. Upstream got it in via
+# "-j .text" because it was a second output section also named .text; now that it
+# has its own name, omitting it would silently produce a binary that fails to
+# initialise RAM at boot.
+	$(OBJCOPY) -O binary -j .text -j .data -j .raminit $(OUTDIR)/$(TARGET).elf $(OUTDIR)/$(TARGET)_dec.bin
 
 $(TARGET).bin: $(TARGET)_dec.bin
 	evic convert $(OUTDIR)/$(TARGET)_dec.bin -o $(OUTDIR)/$(TARGET).bin

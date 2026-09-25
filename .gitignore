@@ -57,3 +57,9 @@ driver/*.sys
 *.map
 genuine/
 wrkspc.txt
+
+# Local build dependencies, fetched not authored:
+#   nuvoton-sdk/  -> Library/ from OpenNuvoton/M451BSP (the M451 BSP CMSIS lib)
+#   .venv/        -> python-evic, providing the `evic` image converter
+nuvoton-sdk/
+.venv/
