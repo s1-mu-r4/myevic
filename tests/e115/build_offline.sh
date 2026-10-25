@@ -119,6 +119,12 @@ print("Offline vector comparison:", {"upstream_original":vec("upstream-original"
                                       "patched":vec("build1")})
 print("Neither image is authorized for flashing")
 PY
+  git show "$PINNED_RON7:bin/myevic.bin" > "$TMP/shipped-ron7-myevic.bin"
+  echo "=== Tracked shipped Ron7 binary vs rebuilt original vs patched ==="
+  python3 tests/e115/compare_reference_images.py \
+    "$TMP/shipped-ron7-myevic.bin" \
+    "$TMP/upstream-original/bin/myevic.bin" \
+    "$TMP/build1/bin/myevic.bin"
 else
   echo "UPSTREAM ORIGINAL BUILD FAILED IN THIS TOOLCHAIN (diagnostic only)"
   tail -35 "$TMP/upstream-build.log"
