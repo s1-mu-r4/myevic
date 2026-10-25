@@ -54,7 +54,7 @@ def main():
         for name in FILES:
             candidates = [item for item in z.infolist()
                           if item.filename.replace("\\", "/").lower().endswith(
-                              "/library/stddriver/src/" + name)]
+                              "library/stddriver/src/" + name)]
             # The vendor can return either one top-level folder or plain Library/.
             if len(candidates) != 1:
                 print("MISSING_OR_MULTIPLE_VENDOR_SOURCE", name, len(candidates))
@@ -77,7 +77,7 @@ def main():
             sm = difflib.SequenceMatcher(a=old_lines, b=new_lines, autojunk=False)
             ops = sm.get_opcodes()
             stat = Counter(tag for tag, *_ in ops)
-            hunks = len(sm.get_grouped_opcodes(n=3))
+            hunks = len(list(sm.get_grouped_opcodes(n=3)))
             changed_lines = sum((ae-as_) + (be-bs)
                                 for op,as_,ae,bs,be in ops if op != "equal")
             total_delta += changed_lines
@@ -87,7 +87,7 @@ def main():
                   "old_lines", len(old_lines), "new_lines", len(new_lines),
                   "changed_lines", changed_lines, "diff_hunks", hunks,
                   "equal", old == new)
-            for part in sm.get_grouped_opcodes(n=2)[:6]:
+            if hunks:
                 patch = list(difflib.unified_diff(old_lines, new_lines,
                      fromfile=f"v3.01.001/{name}",tofile=f"v3.01.003/{name}",
                      n=2, lineterm=""))
