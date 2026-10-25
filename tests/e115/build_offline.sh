@@ -2,6 +2,8 @@
 # Local CI workspace only; never accesses or programs a connected device.
 set -euo pipefail
 ROOT="$(pwd)"
+# GitHub checkout safe-directory entry is temporary and not inherited by this shell.
+git config --global --add safe.directory "$ROOT"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export SOURCE_DATE_EPOCH=1792902672
