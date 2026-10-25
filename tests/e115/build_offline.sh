@@ -89,43 +89,4 @@ print("USB stack frames:", {k:frames[k] for k in ("hidGetOutReport","SaveProfile
 print("ELF LOAD conflicts:",report["load_lma_conflicts"])
 print("NOTE: full call-chain ISR stack, USB behavior, recovery write remain NOT VERIFIED")
 PY
-# A short-lived candidate for user-performed manual testing.
-# Created ONLY after all reproducibility, ROM, stack and ELF assertions pass.
-if [ "$GITHUB_ACTIONS" = "true" ]; then
-  python3 - "$TMP/build1/bin/myevic.bin" "$ROOT" <<'PY'
-import hashlib
-import json
-import struct
-from pathlib import Path
-import sys
-source = Path(sys.argv[1])
-root = Path(sys.argv[2])
-encrypted = source.read_bytes()
-digest = hashlib.sha256(encrypted).hexdigest()
-expected = "db6c67b897da841119f868e7b745cac70d010addac5438172df3987ef74d4046"
-assert len(encrypted) == 100500, "size changed from pinned offline audit"
-assert digest == expected, "firmware differs from previously validated source build"
-n = len(encrypted)
-clear = bytes(b ^ ((n+408376+i-n//408376)&0xff) for i,b in enumerate(encrypted))
-assert b"Joyetech APROM" in clear
-assert b"E115\x01\x00\x01\x00" in clear, "E115 HW metadata missing"
-sp, reset = struct.unpack_from("<II", clear)
-assert 0x20000000 <= sp <= 0x20008000
-assert reset & 1 and (reset & ~1) < len(clear)
-out = root / "e115-manual-test"
-out.mkdir(exist_ok=True)
-name = "ron7-pufflimit-e115-EXPERIMENTAL.bin"
-(out/name).write_bytes(encrypted)
-(out/"SHA256.txt").write_text(f"{digest} *{name}\n")
-(out/"README_FIRST.txt").write_text(
-    "EXPERIMENTAL RON7 E115 TEST IMAGE - NOT A RELEASE\n"
-    "Source: s1-mu-r4/myevic verify/ron7-e115-minimal-fixes\n"
-    "For E115 HW1.00 only. Requires personal acceptance of nonrecoverable brick risk.\n"
-    "No on-device firmware/recovery/safety validation has been performed.\n"
-    "Never use on a different box model, hardware, or revision.\n"
-    "Flashing requires manual device-local operation; no device automation provided.\n"
-    "Official stock V5.04 ZIP must be independently retained.\n")
-print(json.dumps({"test_image":name,"size":len(encrypted),"sha256":digest,"E115_metadata":True},indent=2))
-PY
-fi
-
+echo 'OFFLINE BUILD ONLY: E115 first CFW boot failed; firmware must not be flashed.'
