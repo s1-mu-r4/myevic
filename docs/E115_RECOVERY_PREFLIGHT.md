@@ -1,3 +1,5 @@
+> **2026-10-26 REAL-DEVICE UPDATE:** First experimental CFW boot **FAILED** (unrecognized USB, no boot with battery); the owner **successfully restored stock firmware** using the + button with USB. [Incident details](E115_FIRST_FLASH_INCIDENT_20261026.md). **Do not flash the failed experimental BIN again.** Earlier planning-only recovery notes below refer to the pre-test evidence state.
+
 # E115｜Official USB recovery readiness (offline evidence, 2026-10-26)
 
 ## Intended goal
