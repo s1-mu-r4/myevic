@@ -17,7 +17,7 @@ The screenshot, serial numbers, USB device-unique identifiers and physical firmw
 
 The test artifact published for this experiment by [CI #7](https://github.com/s1-mu-r4/myevic/actions/runs/40239433860) was named `ron7-pufflimit-e115-EXPERIMENTAL.bin`, length **100,500 bytes**, SHA256 `db6c67b897da841119f868e7b745cac70d010addac5438172df3987ef74d4046`.
 
-The owner reported failure immediately after preparing for that test, but has not supplied a freshly computed hash of the **file actually selected in the desktop updater**. Accordingly, the candidate's exact bytes on the device are not yet independently confirmed. It is also unknown whether the downloader reported a complete write, whether any CONFIG changes occurred, and what errors—if any—appeared inside the updater.
+**Owner-provided Windows PowerShell check (2026-10-26):** `Get-FileHash` of the locally retained `ron7-pufflimit-e115-EXPERIMENTAL.bin` returned SHA-256 `DB6C67B897DA841119F868E7B745CAC70D010ADDAC5438172DF3987EF74D4046`, **exactly matching the CI #7 artifact**. This rules out an altered or misidentified *local file*. The user's absolute Windows account path is intentionally omitted. The updater transaction log and independent readback of APROM have not been provided, so the exact bytes accepted/programmed by the device and the updater's full completion state are still not independently proven. Any CONFIG changes and updater errors remain unknown.
 
 A passing build, ROM-size audit, ELF LOAD consistency and synthetic USB stack frame test do **not** establish ARM reset execution or hardware safety.
 
@@ -36,7 +36,7 @@ A passing build, ROM-size audit, ELF LOAD consistency and synthetic USB stack fr
 | Startup/vector/ROM layout | Display and battery startup failed, so failure may precede USB initialization | Decoded initial SP/PC, Reset_Handler branch, RAMInitTable triplets, section LMA, BSS and stack bounds |
 | DataFlash and CONFIG first boot | `InitDataFlash()` can call `FMCCheckConfig()`, which may change CONFIG and reset on mismatch | Source trace and target-state distinctions; **no new real CONFIG writes/read commands** |
 | Clock and USB setup | USB enumeration failed after the update | Determine whether CPU got as far as descriptor setup, or failed earlier |
-| Exact firmware/update transaction | Current CI confirms output hash, not bytes actually stored in APROM | If safely available, owner file SHA and updater completion details; no hardware access needed |
+| Exact firmware/update transaction | Owner's local BIN hash now matches CI output exactly; APROM write/readback was not independently verified | Review any already-saved updater result/error details offline; no device writes |
 | Hardware compatibility and protection | Product marker E115 matches, but may not capture every electrical/hardware variant | Board-specific startup assumptions and firmware map; no power test |
 
 **Important:** Windows USB-unrecognized message is a symptom, not proof the USB descriptors or driver are defective. If firmware fails before USB starts, the same message is possible.
