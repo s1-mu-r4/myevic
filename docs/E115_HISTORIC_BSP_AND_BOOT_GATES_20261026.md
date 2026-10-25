@@ -48,3 +48,27 @@ The [source-only comparison tool](../tests/e115/audit_historic_bsp.py) also acce
 3. Any proposed patch must be supported by evidence in the actual cold-start call chain, use a **new candidate identity**, and remain unflashed until specifically reviewed for power/output safety and recoverability.
 
 **Status: HISTORIC_BSP_SOURCE_UNAVAILABLE; PRE_USB_C_BODIES_UNCHANGED; ROOT_CAUSE_UNKNOWN; CURRENT_CFW_NO-GO.**
+
+
+## New source-coupled boot-gate tests (2026-10-26)
+
+Added [seven offline branch-matrix tests](../tests/e115/test_boot_gate_model.py), whose setup asserts that the actual C function bodies still contain the expected CFG and LDROM conditions. [Actions #28](https://github.com/s1-mu-r4/myevic/actions/runs/40247058812): **all 20 Python tests (13 prior + 7 new) passed**, along with the required ARM build/ELF/stack gates. These tests are a **model of the preserved source's control flow**, not evidence that the owner device entered any particular branch.
+
+Observed source-contract cases:
+
+| Initial condition | Code-level predicted action | Hardware evidence |
+|---|---|---|
+| DFEN already enabled; DFBA matches expected base | No CONFIG erase/write | Actual owner CONFIG unknown |
+| DFEN disabled or DFBA mismatch; write+readback succeeds | CONFIG erase and reprogram, then software reset | Actual owner CONFIG unknown |
+| CONFIG write or verification fails | `FMCCheckConfig` returns 0; caller's subsequent behavior requires review | Actual owner CONFIG unknown |
+| Physical LDROM product code found | Select box model and continue | Owner's physical LDROM code not independently read |
+| No recognized physical LDROM code | `ResetToLDROM()` and switch boot mode | No trace of whether this occurred |
+| HXT/LXT readiness timeout | SDK wait is finite; caller ignores return in the reviewed source | No clock fault trace |
+
+The new matrix **does not identify the root cause**. It narrows a valid future diagnosis to evidence about CONFIG/LDROM state, software reset and the earliest clock initialization. Never bypass the model-ID branch as a speculative boot fix.
+
+## Additional vendor archive availability check
+
+The independently scheduled historic-BSP job at [Actions #28](https://github.com/s1-mu-r4/myevic/actions/runs/40247058812) again obtained only the legacy official endpoint's non-ZIP response. The publicly available official BSP version on Nuvoton's current support page is much newer, and the 2015 v3.01.001 revision history still exists, but those are **not substitutes for actual 2015 source bytes**. Both docs and CI continue to mark v3.01.001 source as **UNAVAILABLE**, not successfully compared. No unauthenticated mirror has been accepted as genuine.
+
+**Outcome:** fork sources and CI are intact; there is no new experimental firmware, no device access and no authorized reflash.
