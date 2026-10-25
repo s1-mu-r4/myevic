@@ -1,4 +1,5 @@
 #include "myevic.h"
+#include "pufflimit.h"
 #include "screens.h"
 #include "events.h"
 #include "dataflash.h"
@@ -352,6 +353,13 @@ __myevic__ void StopFire()
 			if ( dfTimeCount > 999999 ) dfTimeCount = 0;
 			if ( ++dfPuffCount > 99999 ) dfPuffCount = 0;
 			UpdatePTTimer = 80;
+
+			// Count against the limiter window here, reusing the stock
+			// "FireDuration > 5" threshold so a stray button brush is not
+			// charged as a puff. Deliberately a SEPARATE counter from
+			// dfPuffCount, which the Reset Puff Counter menu item zeroes
+			// (eh.c case 22) and therefore cannot carry enforcement.
+			PLCountPuff();
 		}
 
 		RTCWriteRegister( RTCSPARE_VV_MJOULES, MilliJoules );

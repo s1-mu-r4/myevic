@@ -1,5 +1,6 @@
 #include "myevic.h"
 #include "events.h"
+#include "pufflimit.h"
 #include "screens.h"
 #include "display.h"
 #include "myrtc.h"
@@ -1139,6 +1140,8 @@ __myevic__ void Object3DOnClick()
 
 //-----------------------------------------------------------------------------
 
+#if WITH_GAME
+
 __myevic__ void GameMEnter()
 {
 	CurrentMenuItem = dfFBSpeed;
@@ -1154,6 +1157,8 @@ __myevic__ void GameIClick()
 {
 	fbStartGame();
 }
+
+#endif // WITH_GAME
 
 //-----------------------------------------------------------------------------
 
@@ -1466,10 +1471,281 @@ __myevic__ void CurveMenuOnClick()
 
 
 //-----------------------------------------------------------------------------
+// PUFF LIMITER MENUS
+//-----------------------------------------------------------------------------
+// Item indices for PuffLimitMenu. Named because three separate functions
+// switch on them: renumbering the caption list without these would silently
+// wire a caption onto the wrong flag, and "the Show switch turns enforcement
+// off" is not a bug that shows up in a build.
+//-----------------------------------------------------------------------------
+
+enum
+{
+	PLMI_ENABLE = 0,
+	PLMI_PUFFS,
+	PLMI_WINDOW,
+	PLMI_SCHED,
+	PLMI_HOURS,
+	PLMI_CLOSED,
+	PLMI_SHOW,
+	PLMI_USED,
+	PLMI_BACK,
+	PLMI_COUNT
+};
+
+// The stored window is seconds in a uint16_t, but an editor that steps one
+// second per click cannot reach a two-hour window in a human lifetime. Edit
+// in minutes on a 5-minute grid: 5..995 minutes is 300..59700 seconds, which
+// sits inside the uint16_t and comfortably above PL_MIN_WINDOW_SECS, so
+// nothing this menu can produce will be rejected by PLValidate().
+#define PL_WIN_STEP			5
+#define PL_WIN_BIG_STEP		30
+#define PL_WIN_MIN_MINS		5
+#define PL_WIN_MAX_MINS		995
+
+
+__myevic__ int PLWindowMins()
+{
+	int m = dfPLWindowSecs / 60;
+
+	// Snap onto the grid. The stored value need not be a multiple of the
+	// step: it can come from a USB write, from the compile-time default, or
+	// from the arbitrary bytes that occupied this padding on a device
+	// flashed from stock firmware.
+	m -= m % PL_WIN_STEP;
+
+	if ( m < PL_WIN_MIN_MINS ) m = PL_WIN_MIN_MINS;
+	if ( m > PL_WIN_MAX_MINS ) m = PL_WIN_MAX_MINS;
+
+	return m;
+}
+
+
+__myevic__ void PLSetWindowMins( int m )
+{
+	// Clamp while the key is HELD, wrap only on a short press. That is the
+	// stock rule, from MenuDataAction(): "( KeyTicks < 5 ) ? min : max".
+	//
+	// Wrapping unconditionally would be an enforcement hole reachable by
+	// leaning on a button: the big step engages at KeyTicks >= 105, which is
+	// past the point where stock stops wrapping, so about two seconds of
+	// held "+" would roll 995 minutes round to 5 and make the allowance
+	// reset two hundred times more often. Same class of accident the hours
+	// editor refuses a few functions below.
+	if ( m > PL_WIN_MAX_MINS )
+		m = ( KeyTicks < 5 ) ? PL_WIN_MIN_MINS : PL_WIN_MAX_MINS;
+
+	if ( m < PL_WIN_MIN_MINS )
+		m = ( KeyTicks < 5 ) ? PL_WIN_MAX_MINS : PL_WIN_MIN_MINS;
+
+	// 995 * 60 = 59700, so this cannot overflow the uint16_t.
+	dfPLWindowSecs = m * 60;
+}
+
+
+__myevic__ void PLMenuMEnter()
+{
+	// Normalise the stored window onto the editor's grid on entry.
+	//
+	// PLWindowMins() clamps for DISPLAY, but PLValidate() only rejects
+	// values below PL_MIN_WINDOW_SECS (60), so a stored 137 seconds is legal
+	// and persists. Without this the menu would read "5m" while the gate
+	// enforced 2m17s: the display would be lying in the permissive
+	// direction, which is the one direction it must never lie in.
+	uint16_t secs = PLWindowMins() * 60;
+
+	if ( secs != dfPLWindowSecs )
+	{
+		dfPLWindowSecs = secs;
+		UpdateDFTimer = 50;
+	}
+}
+
+
+__myevic__ void PLMenuIDraw( int it, int line, int sel )
+{
+	const uint8_t *s;
+
+	switch ( it )
+	{
+		case PLMI_ENABLE:
+			s = ( dfPLFlags & PL_FLAG_ENABLED ) ? String_On : String_Off;
+			break;
+
+		case PLMI_SCHED:
+			s = ( dfPLFlags & PL_FLAG_SCHEDULE ) ? String_On : String_Off;
+			break;
+
+		case PLMI_CLOSED:
+			s = ( dfPLFlags & PL_FLAG_FAIL_CLOSED ) ? String_On : String_Off;
+			break;
+
+		case PLMI_SHOW:
+			s = ( dfPLFlags & PL_FLAG_SHOW_MODE ) ? String_On : String_Off;
+			break;
+
+		case PLMI_WINDOW:
+			// Caption "Win" is 17px wide, so the value column is free from
+			// x=34. Minutes then 'm' (glyph 0x8E), rendered the way the
+			// screen protection menu renders its timeouts.
+			DrawFillRect( 34, line, 63, line+12, 0 );
+			DrawValueRight( 53, line+2, PLWindowMins(), 0, 0x0B, 0 );
+			DrawImage( 55, line+2, 0x8E );
+			if ( sel && gFlags.edit_value )
+				InvertRect( 0, line, 63, line+12 );
+			return;
+
+		case PLMI_USED:
+			// Read-only, live from dataflash. This is the one number that
+			// says what the gate will actually do on the next press, and
+			// without it the only way to learn the count is to be refused.
+			DrawFillRect( 30, line, 63, line+12, 0 );
+			DrawValueRight( 63, line+2, dfPLWindowCount, 0, 0x0B, 0 );
+			return;
+
+		default:
+			// PLMI_PUFFS draws itself through MACTION_DATA, PLMI_HOURS is a
+			// submenu and PLMI_BACK is a plain caption.
+			return;
+	}
+
+	DrawFillRect( 40, line, 63, line+12, 0 );
+	DrawStringRight( s, 63, line+2 );
+}
+
+
+__myevic__ void PLMenuOnClick()
+{
+	// The flag byte is toggled here as a byte rather than through
+	// MITYPE_BIT. MITYPE_BIT reads and writes its target as a uint32_t, and
+	// PLFlags sits at offset 0xE7 of dfParams_t, which is not 4-byte
+	// aligned: that would be an unaligned 32-bit read-modify-write straddling
+	// PLMaxPuffs. It might work on this core and it might trap, and it is not
+	// testable without the hardware, so it is simply not done.
+	switch ( CurrentMenuItem )
+	{
+		case PLMI_ENABLE:
+			dfPLFlags ^= PL_FLAG_ENABLED;
+			break;
+
+		case PLMI_SCHED:
+			dfPLFlags ^= PL_FLAG_SCHEDULE;
+			break;
+
+		case PLMI_CLOSED:
+			dfPLFlags ^= PL_FLAG_FAIL_CLOSED;
+			break;
+
+		case PLMI_SHOW:
+			dfPLFlags ^= PL_FLAG_SHOW_MODE;
+			break;
+
+		case PLMI_WINDOW:
+			gFlags.edit_value ^= 1;
+			break;
+
+		default:
+			// PLMI_PUFFS is consumed by MenuDataAction() before this runs.
+			// PLMI_HOURS opens a submenu, PLMI_USED is read-only.
+			return;
+	}
+
+	UpdateDFTimer = 50;
+	gFlags.refresh_display = 1;
+}
+
+
+__myevic__ int PLMenuOnEvent( int event )
+{
+	int m, step;
+
+	// Only the window length needs a custom editor; every other item is
+	// either a flag toggle (on_clickitem) or MACTION_DATA. Returning 0 for
+	// everything else is what lets MenuDataAction() still see the events for
+	// PLMI_PUFFS, because MenuEvent() calls this hook first.
+	if ( CurrentMenuItem != PLMI_WINDOW ) return 0;
+	if ( !gFlags.edit_value ) return 0;
+
+	step = ( KeyTicks >= 105 ) ? PL_WIN_BIG_STEP : PL_WIN_STEP;
+	m = PLWindowMins();
+
+	switch ( event )
+	{
+		case 2:
+			m += step;
+			break;
+
+		case 3:
+			m -= step;
+			break;
+
+		default:
+			return 0;
+	}
+
+	PLSetWindowMins( m );
+
+	UpdateDFTimer = 50;
+	ScreenDuration = 30;
+	gFlags.refresh_display = 1;
+
+	return 1;
+}
+
+
+__myevic__ void PLHoursIDraw( int it, int line, int sel )
+{
+	// One row per hour, 0..23. These items carry no caption, so DrawMenu()
+	// draws nothing for them and the whole row, selection highlight
+	// included, is this function's job, as in ProfileMenuIDraw().
+	if ( it >= 24 ) return;
+
+	DrawValue( 4, line+2, it, 0, 0x0B, 2 );
+	DrawStringRight( ( dfPLSchedule & ( 1UL << it ) ) ? String_On : String_Off,
+					 63, line+2 );
+
+	if ( sel ) InvertRect( 0, line, 63, line+12 );
+}
+
+
+__myevic__ void PLHoursOnClick()
+{
+	uint32_t mask;
+
+	if ( CurrentMenuItem >= 24 ) return;
+
+	mask = 1UL << CurrentMenuItem;
+
+	if ( dfPLSchedule & mask )
+	{
+		// Refuse to clear the last permitted hour. PLValidate() treats an
+		// all-hours-barred schedule as corrupt and resets it to "every hour
+		// allowed", so clearing the last bit would not lock the device down,
+		// it would silently turn the schedule off entirely at the next load.
+		// That is a fail-open transition reachable by holding a button, so
+		// the menu never produces the value that triggers it. The way to
+		// stop scheduling is the Sched switch.
+		if ( ( dfPLSchedule & 0x00FFFFFF ) != mask )
+		{
+			dfPLSchedule &= ~mask;
+		}
+	}
+	else
+	{
+		dfPLSchedule |= mask;
+	}
+
+	UpdateDFTimer = 50;
+	gFlags.refresh_display = 1;
+}
+
+
+//-----------------------------------------------------------------------------
 // Forward declarations for parent menu pointers
 
 const menu_t MainMenu;
 const menu_t CoilsMenu;
+const menu_t PuffLimitMenu;
 const menu_t ClockMenu;
 const menu_t ScreenMenu;
 const menu_t MiscsMenu;
@@ -1494,6 +1770,7 @@ const mbitdesc_t InvBitDesc =
 	String_On
 };
 
+#if WITH_GAME
 const menu_t GameMenu =
 {
 	String_Game,
@@ -1511,6 +1788,7 @@ const menu_t GameMenu =
 		{ String_Back, 0, EVENT_PARENT_MENU, 0 }
 	}
 };
+#endif // WITH_GAME
 
 const menu_t ModesMenu =
 {
@@ -1808,6 +2086,8 @@ const menu_t LedMenu =
 	}
 };
 
+// The Game entry disappears with the game itself: leaving it would be a menu
+// item that silently does nothing, which is worse than not having it.
 const menu_t MiscsMenu =
 {
 	String_Miscs,
@@ -1817,9 +2097,14 @@ const menu_t MiscsMenu =
 	0,
 	0,
 	0,
+#if WITH_GAME
 	4,
 	{
 		{ String_Game, &GameMenu, 0, MACTION_SUBMENU },
+#else
+	3,
+	{
+#endif
 		{ String_Led, &LedMenu, 0, MACTION_SUBMENU },
 		{ String_3D, &Object3DMenu, 0, MACTION_SUBMENU },
 		{ String_Back, 0, EVENT_PARENT_MENU, 0 }
@@ -2305,6 +2590,105 @@ const menu_t ProfileMenu =
 };
 
 
+//-----------------------------------------------------------------------------
+// Puff limiter
+//-----------------------------------------------------------------------------
+
+// PLMaxPuffs is a uint16_t at offset 0xE8, which IS 4-byte aligned, and the
+// range fits an int16_t, so unlike the flag byte this one can safely go
+// through the stock MITYPE_WORD editor.
+//
+// min is 1, not 0. PLValidate() would accept 0, and 0 means "every puff is
+// refused" because the gate tests count >= limit; that is a reachable state
+// but not one to hand out by holding the minus button. Long-pressing fire on
+// this item resets it to the compile-time default, via def2.
+const mvaluedesc_t PLMaxPuffsDesc =
+{
+	34, 63,
+	0, 0,
+	1, PL_MAX_PUFFS_LIMIT,
+	0,
+	0,
+	0,
+	0x0B,
+	1,
+	-1, PL_DEFAULT_MAX_PUFFS
+};
+
+const mdata_t PLMaxPuffsData =
+{
+	&dfPLMaxPuffs,
+	&PLMaxPuffsDesc,
+	MITYPE_WORD,
+	0
+};
+
+// One row per hour of the day, plus Back. The captions are null because
+// PLHoursIDraw() draws the hour number and the state itself.
+const menu_t PLHoursMenu =
+{
+	String_Hours,
+	&PuffLimitMenu,
+	0,
+	PLHoursIDraw+1,
+	0,
+	PLHoursOnClick+1,
+	0,
+	25,
+	{
+		{ 0, 0, 0, 0 },		// 00
+		{ 0, 0, 0, 0 },		// 01
+		{ 0, 0, 0, 0 },		// 02
+		{ 0, 0, 0, 0 },		// 03
+		{ 0, 0, 0, 0 },		// 04
+		{ 0, 0, 0, 0 },		// 05
+		{ 0, 0, 0, 0 },		// 06
+		{ 0, 0, 0, 0 },		// 07
+		{ 0, 0, 0, 0 },		// 08
+		{ 0, 0, 0, 0 },		// 09
+		{ 0, 0, 0, 0 },		// 10
+		{ 0, 0, 0, 0 },		// 11
+		{ 0, 0, 0, 0 },		// 12
+		{ 0, 0, 0, 0 },		// 13
+		{ 0, 0, 0, 0 },		// 14
+		{ 0, 0, 0, 0 },		// 15
+		{ 0, 0, 0, 0 },		// 16
+		{ 0, 0, 0, 0 },		// 17
+		{ 0, 0, 0, 0 },		// 18
+		{ 0, 0, 0, 0 },		// 19
+		{ 0, 0, 0, 0 },		// 20
+		{ 0, 0, 0, 0 },		// 21
+		{ 0, 0, 0, 0 },		// 22
+		{ 0, 0, 0, 0 },		// 23
+		{ String_Back, 0, EVENT_PARENT_MENU, 0 }
+	}
+};
+
+// Item order must match the PLMI_* enum.
+const menu_t PuffLimitMenu =
+{
+	String_Limit,
+	&MainMenu,
+	PLMenuMEnter+1,
+	PLMenuIDraw+1,
+	0,
+	PLMenuOnClick+1,
+	PLMenuOnEvent+1,
+	PLMI_COUNT,
+	{
+		{ String_Enable, 0, 0, 0 },
+		{ String_Puffs, &PLMaxPuffsData, 0, MACTION_DATA },
+		{ String_Win, 0, 0, 0 },
+		{ String_Sched, 0, 0, 0 },
+		{ String_Hours, &PLHoursMenu, 0, MACTION_SUBMENU },
+		{ String_Closed, 0, 0, 0 },
+		{ String_Show, 0, 0, 0 },
+		{ String_Used, 0, 0, 0 },
+		{ String_Back, 0, EVENT_PARENT_MENU, 0 }
+	}
+};
+
+
 const menu_t MainMenu =
 {
 	String_Menus,
@@ -2314,11 +2698,12 @@ const menu_t MainMenu =
 	0,
 	0,
 	0,
-	7,
+	8,
 	{
 		{ String_Screen, &ScreenMenu, 0, MACTION_SUBMENU },
 		{ String_Coils, &CoilsMenu, 0, MACTION_SUBMENU },
 		{ String_Vaping, &VapingMenu, 0, MACTION_SUBMENU },
+		{ String_Limit, &PuffLimitMenu, 0, MACTION_SUBMENU },
 		{ String_Clock, &ClockMenu, 0, MACTION_SUBMENU },
 		{ String_Interface, &IFMenu, 0, MACTION_SUBMENU },
 		{ String_Expert, &ExpertMenu, 0, MACTION_SUBMENU },

@@ -6,6 +6,23 @@
 #define BLINKITEM(i) ((EditModeTimer)&&(!gFlags.draw_edited_item)&&(EditItemIndex==(i)))
 
 //==============================================================================
+// Puff limiter refusal screen.
+//
+// Screen ids are bare numbers all over this codebase; this one gets a name
+// because it has to stay consistent in three places that are far apart: the
+// draw dispatch and the timeout switch in DrawScreen() (screens.c), and the
+// limiter gate in EventHandler() (eh.c) that raises it. 26 was free: the
+// stock firmware uses 0-5, 20-25, 28, 29, 31, 37, 40, 50, 51, 54-58, 60 and
+// 100-107, and IsMenuScreen() only claims 101-107.
+
+#define SCREEN_PUFFLIMIT		26
+
+// How long the refusal screen stays up, in seconds. Longer than the stock
+// refusal screens (Battery Low is 2s, Atomizer Low is 1s) because this one
+// carries an HH:MM:SS countdown that has to be read, not just noticed.
+#define SCREEN_PUFFLIMIT_SECS	5
+
+//==============================================================================
 
 extern uint8_t	Screen;
 extern uint16_t	ScreenDuration;
@@ -73,6 +90,7 @@ extern void ShowChargeError();
 extern void ShowImbBatts();
 extern void ShowPowerCurve();
 extern void ShowSplash();
+extern void ShowPuffLimit();
 
 extern void ShowFireDuration( int line );
 
@@ -298,6 +316,20 @@ extern const uint8_t String_Curve[];
 extern const uint8_t String_Enable[];
 extern const uint8_t String_Reset[];
 extern const uint8_t String_Splash[];
+
+// Puff limiter
+extern const uint8_t String_PuffLimit[];
+extern const uint8_t String_Limit[];
+extern const uint8_t String_Reached[];
+extern const uint8_t String_Hours[];
+extern const uint8_t String_Next[];
+extern const uint8_t String_Used[];
+extern const uint8_t String_Win[];
+extern const uint8_t String_Sched[];
+extern const uint8_t String_Closed[];
+extern const uint8_t String_ClockLost[];
+extern const uint8_t String_Open[];
+extern const uint8_t String_Puffs[];
 
 
 //==============================================================================

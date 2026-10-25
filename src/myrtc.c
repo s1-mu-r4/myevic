@@ -1,4 +1,5 @@
 #include "myevic.h"
+#include "pufflimit.h"
 #include "dataflash.h"
 #include "screens.h"
 #include "timers.h"
@@ -58,7 +59,7 @@ __myevic__ time_t time_to_epoch ( const struct tm *ltm, int utcdiff )
 
 	tyears = ltm->tm_year - 70 ; // tm->tm_year is from 1900.
 	leaps = (tyears + 2) / 4; // no of next two lines until year 2100.
-	//i = (ltm->tm_year – 100) / 100;
+	//i = (ltm->tm_year ï¿½ 100) / 100;
 	//leaps -= ( (i/4)*3 + i%4 );
 	tdays = 0;
 	for (i=0; i < ltm->tm_mon; i++) tdays += mon_days[i];
@@ -417,6 +418,13 @@ __myevic__ void SetRTC( S_RTC_TIME_DATA_T *rtd )
 	sleep_ticks = 0;
 
 	__set_PRIMASK( 0 );
+
+	// Seal the clock for the puff limiter. This is the ONLY place the seal is
+	// written, and deliberately so: it must mean "a human or evic-usb set this
+	// time", not merely "the RTC is ticking". Sealing anywhere else, above all
+	// at boot, would re-bless a clock that had just been reset by power loss,
+	// which is the exact situation the seal exists to detect.
+	PLSealClock();
 }
 
 

@@ -183,6 +183,20 @@ typedef struct dfParams
 /* 00E0 */	uint16_t	Millis;
 /* 00E2 */	uint8_t		Profile;
 /* 00E3 */	int8_t		BVOffset[4];
+
+// Puff limiter. These sit in what was previously padding: dfParams_t ended
+// at 0x00E7 and DATAFLASH_PARAMS_SIZE is ALIGN256(sizeof), so 0x00E7-0x00FF
+// was already allocated and zero-cost. Every field below therefore has to be
+// range-checked by PLValidate() on load, because an existing device carries
+// whatever arbitrary bytes previously occupied this space and the page CRC
+// happily validates them. Offsets are hand-placed to keep natural alignment.
+/* 00E7 */	uint8_t		PLFlags;
+/* 00E8 */	uint16_t	PLMaxPuffs;
+/* 00EA */	uint16_t	PLWindowSecs;
+/* 00EC */	uint16_t	PLWindowCount;
+/* 00EE */	uint8_t		PLPad[2];
+/* 00F0 */	uint32_t	PLWindowStart;
+/* 00F4 */	uint32_t	PLSchedule;
 }
 dfParams_t;
 
@@ -368,6 +382,13 @@ extern dfStruct_t DataFlash;
 #define dfPID			DFP(PID)
 #define dfMillis		DFP(Millis)
 #define dfProfile		DFP(Profile)
+
+#define dfPLFlags		DFP(PLFlags)
+#define dfPLMaxPuffs	DFP(PLMaxPuffs)
+#define dfPLWindowSecs	DFP(PLWindowSecs)
+#define dfPLWindowCount	DFP(PLWindowCount)
+#define dfPLWindowStart	DFP(PLWindowStart)
+#define dfPLSchedule	DFP(PLSchedule)
 
 #define dfFWVersion		DFI(FWVersion)
 #define dffmcCID        DFI(fmcCID)

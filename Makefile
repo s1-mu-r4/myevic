@@ -1,5 +1,23 @@
 TARGET := myevic
 
+# Flappy Bird game: in or out of the build.
+#
+# This is a ROM budget decision, not a taste one. ROM is 100K (0x19000) and
+# that is a hard wall: DATAFLASH_LOGO_1327_BASE is 0x19000 and those two logo
+# pages are at addresses hardcoded inside Joyetech's custom-logo utility, so
+# the image cannot grow past them. Upstream already used 102212 of the 102400
+# bytes available, leaving 188. The puff limiter's countdown screen and config
+# menu need about 1250, and flappy.o + fbdata.o are 4319 of sprite data and
+# game loop, which is the largest block of pure entertainment in the image.
+#
+# Build with WITH_GAME=1 to put the game back; the limiter UI then will not
+# fit and something else has to give.
+#
+# Nothing else needs changing when this is off: every call site is guarded by
+# gFlags.playing_fb, which only flappy.c ever sets, so those branches are
+# statically dead. flappy.h supplies no-op stubs so they still compile.
+WITH_GAME ?= 0
+
 # We make the following assumptions on Windows:
 # arm-none-eabi gcc and binutils are compiled for Windows,
 # so if you are using Cygwin, we will need path translations
@@ -45,8 +63,7 @@ MYEVIC_OBJS := src/myevic.o \
 	src/meusbd.o \
 	src/vcom.o \
 	src/storage.o \
-	src/flappy.o \
-	src/fbdata.o \
+	src/pufflimit.o \
 	src/fonts.o \
 	src/display.o \
 	src/SSD1306.o \
@@ -179,8 +196,30 @@ CFLAGS += -fno-builtin-printf
 # than refactor 2017 code we have not tested yet. Worth cleaning up later by
 # giving each such variable a single definition plus an extern declaration.
 CFLAGS += -fcommon
+CFLAGS += -DWITH_GAME=$(WITH_GAME)
 CFLAGS += $(INCDIRS)
 
+# The game objects are named unconditionally for `clean`, but only LINKED when
+# WITH_GAME=1. Cleaning only what the current flag selects would strand the
+# other pair of .o files in the tree.
+GAME_OBJS := src/flappy.o src/fbdata.o
+
+ifeq ($(WITH_GAME),1)
+MYEVIC_OBJS += $(GAME_OBJS)
+endif
+
+# Flipping WITH_GAME changes the CODE in menus.o (the Game menu entry and
+# GameIClick's call to fbStartGame), so every object must be rebuilt when it
+# changes. Without this, `make WITH_GAME=1` followed by a plain `make` leaves a
+# stale menus.o calling fbStartGame() while flappy.o is no longer linked, and
+# the result is an undefined-reference failure that reads like a source bug.
+# The stamp file carries the flag value in its name, so changing the flag makes
+# it a missing prerequisite and forces the rebuild.
+WITH_GAME_STAMP := .with_game.$(WITH_GAME)
+
+$(WITH_GAME_STAMP):
+	rm -f .with_game.* $(MYEVIC_OBJS) $(GAME_OBJS)
+	touch $@
 
 ASFLAGS := -mcpu=$(CPU) -mfpu=$(FPU)
 ASFLAGS += $(INCDIRS)
@@ -210,10 +249,10 @@ all: env_check $(TARGET).bin
 $(OBJS_FIXPATH): %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.c $(INCLUDEH)
+%.o: %.c $(INCLUDEH) $(WITH_GAME_STAMP)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-%.o: %.s $(INCLUDES)
+%.o: %.s $(INCLUDES) $(WITH_GAME_STAMP)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TARGET)_dec.bin: $(OBJS_FIXPATH) $(MYEVIC_OBJS)
@@ -233,7 +272,7 @@ docs:
 	doxygen
 
 clean:
-	rm -rf $(OBJS) $(MYEVIC_OBJS) $(AEABI_OBJS) $(OUTDIR)/$(TARGET).bin $(OUTDIR) $(DOCDIR)
+	rm -rf $(OBJS) $(MYEVIC_OBJS) $(GAME_OBJS) $(AEABI_OBJS) .with_game.* $(OUTDIR)/$(TARGET).bin $(OUTDIR) $(DOCDIR)
 
 env_check:
 ifeq ($(ARMGCC),)

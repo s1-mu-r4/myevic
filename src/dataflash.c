@@ -1,4 +1,5 @@
 #include "myevic.h"
+#include "pufflimit.h"
 #include "myrtc.h"
 #include "screens.h"
 #include "atomizer.h"
@@ -537,6 +538,12 @@ __myevic__ void ResetDataFlash()
 	dfPID.D = PID_D_DEF;
 //	dfMillis = 0;
 //	dfProfile = 0;
+
+	// Puff limiter defaults. Must be set BEFORE UpdateDataFlash() so they are
+	// part of the page this writes, otherwise a freshly reset device would
+	// carry an unvalidated limiter config until the next unrelated write.
+	PLResetDefaults();
+
 	UpdateDataFlash();
 
 	dfPuffCount = 0;
@@ -552,6 +559,11 @@ __myevic__ void ResetDataFlash()
 __myevic__ void DFCheckValuesValidity()
 {
 	int i,v;
+
+	// Range-check the limiter config on every load. These fields live in what
+	// used to be struct padding, so on a device flashed from stock firmware
+	// they contain arbitrary bytes that the page CRC nonetheless accepts.
+	PLValidate();
 
 	if ( dfMode >= 7 )
 		dfMode = 4;

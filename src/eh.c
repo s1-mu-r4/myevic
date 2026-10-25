@@ -1,4 +1,5 @@
 #include "myevic.h"
+#include "pufflimit.h"
 #include "screens.h"
 #include "atomizer.h"
 #include "display.h"
@@ -561,6 +562,50 @@ __myevic__ void EventHandler()
 			}
 
 		//	myprintf( "StartFire\n" );
+
+			// Puff limiter gate. This is the ONLY place gFlags.firing is set,
+			// so a refusal here cannot be routed around. Bailing out with a
+			// plain return is the same shape as the resistance-lock guards
+			// earlier in this function, and it is failsafe: not firing is
+			// always the safe outcome on a device driving a coil off a cell.
+			if ( !PLCheckFire() )
+			{
+				// StopFire() FIRST, and it is not optional. The block above
+				// has already switched PD1/PD7 to an output and driven it
+				// low, and lit the LED on eGrip II / eVic AIO. StopFire() is
+				// the only code that undoes either: it puts the pin back to
+				// GPIO_MODE_INPUT and re-arms LEDTimer.
+				//
+				// Leaving it applied is not cosmetic. The usual cleanup on
+				// button release is the UserInputs >= 14 branch in
+				// GetUserInput(), but with USB attached the PD7 test earlier
+				// in that function sees the still-low pin first and yields
+				// UserInputs = 12, "battery charge start". 12 < 14, so the
+				// release-time StopFire() never runs, gFlags.battery_charging
+				// latches, and the matching "charge stop" test needs PD7 high
+				// so it can never fire. The box then believes it is charging
+				// until a reboot, with the LED stuck on.
+				//
+				// Safe with gFlags.firing == 0: StopFire() guards its puff
+				// accounting behind that flag, so refusing costs no puff.
+				// Every sibling refusal in this function does the same.
+				StopFire();
+
+				// Say why. A silent refusal is indistinguishable from a
+				// flat cell or a dead board. Same shape as the Battery Low
+				// and Atomizer Low refusals above.
+				//
+				// KeyPressTime |= 0x8000 makes the held fire button go idle
+				// instead of spinning towards the 10s-protection path, which
+				// is what those refusals do too. Without it the button is
+				// held against a gate that will not open and the box never
+				// settles.
+				gFlags.refresh_display = 1;
+				Screen = SCREEN_PUFFLIMIT;
+				ScreenDuration = SCREEN_PUFFLIMIT_SECS;
+				KeyPressTime |= 0x8000;
+				return;
+			}
 
 			gFlags.firing = 1;
 			FireDuration = 0;

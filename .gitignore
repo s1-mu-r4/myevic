@@ -63,3 +63,4 @@ wrkspc.txt
 #   .venv/        -> python-evic, providing the `evic` image converter
 nuvoton-sdk/
 .venv/
+.with_game.*

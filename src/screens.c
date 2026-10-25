@@ -1,5 +1,6 @@
 #include "myevic.h"
 #include "screens.h"
+#include "pufflimit.h"
 #include "display.h"
 #include "menus.h"
 #include "myrtc.h"
@@ -107,6 +108,10 @@ __myevic__ void DrawScreen()
 
 			case 25: // Battery Low Lock
 				ShowBatLowLock();
+				break;
+
+			case SCREEN_PUFFLIMIT: // Puff limiter refusal
+				ShowPuffLimit();
 				break;
 
 			case 28: // Key Lock
@@ -301,6 +306,7 @@ __myevic__ void DrawScreen()
 
 		case  20: // No Atomizer Found
 		case  21: // Atomizer Short
+		case SCREEN_PUFFLIMIT: // Puff limiter refusal
 		case  29: // Device too hot
 		case  31: // Key UnLock
 		case  51: // New Coil
@@ -848,6 +854,142 @@ __myevic__ void Show10sProtec()
 	ShowFireDuration( 49 );
 	DrawStringCentered( String_LongFire, 88 );
 	DrawStringCentered( String_Protection, 102 );
+}
+
+
+//=========================================================================
+// Puff limiter refusal screen.
+//
+// Raised only by the limiter gate in EventHandler() (eh.c), which has just
+// called PLCheckFire(); the status latched here was therefore computed
+// microseconds ago.
+//
+// The countdown is a SNAPSHOT taken at the moment of refusal. It does not
+// tick down while the screen is up. That is deliberate: refreshing it live
+// would mean calling back into the limiter, and PLCheckFire() has side
+// effects (it can roll the window and schedule a dataflash write), so it
+// must never run from a draw path. The screen lives for a few seconds and
+// the window is measured in minutes to hours, so the staleness is bounded
+// by SCREEN_PUFFLIMIT_SECS and is not worth the risk of a second caller.
+//
+// Counters are read live from dataflash rather than from the snapshot, so
+// they are right even if the snapshot is not.
+//-------------------------------------------------------------------------
+
+__myevic__ void ShowPuffLimit()
+{
+	PLStatus_t s;
+	uint32_t hh, mm, ss;
+	uint8_t buf[16];
+	int i;
+
+	PLGetStatus( &s );
+
+	DrawString( String_PuffLimit, 4, 6 );	// w=52, so x=4..56
+	DrawHLine( 0, 16, 63, 1 );
+
+	//---------------------------------------------------------------------
+	// Why the puff was refused.
+	//---------------------------------------------------------------------
+	switch ( s.reason )
+	{
+		case PL_BLOCK_WINDOW:
+			DrawStringCentered( String_Limit, 24 );
+			DrawStringCentered( String_Reached, 34 );
+			break;
+
+		case PL_BLOCK_SCHEDULE:
+			DrawStringCentered( String_Off, 24 );
+			DrawStringCentered( String_Hours, 34 );
+			break;
+
+		case PL_BLOCK_NOCLOCK:
+			DrawStringCentered( String_No, 24 );
+			DrawStringCentered( String_Clock, 34 );
+			// The only way out of a fail-closed lockout is to set the clock
+			// again, because that is the one place the seal is written
+			// (SetRTC()). Say so: nothing else on the device hints at it,
+			// and an unexplained permanent refusal reads as a dead device.
+			// This slot is free here because an untrusted clock never
+			// produces a countdown.
+			DrawStringCentered( String_SetTime, 52 );
+			break;
+
+		default:
+			// PL_ALLOW must not reach this screen. Fall through to the
+			// counter rather than drawing a wrong reason.
+			break;
+	}
+
+	//---------------------------------------------------------------------
+	// Countdown to the next window.
+	//
+	// Zero means "not known" and the block is omitted. That covers the
+	// untrusted-clock case, where by definition there is no trustworthy
+	// time remaining to show, and the clock-set-backwards case in
+	// PLCheckFire(), which re-anchors the window without computing one.
+	//---------------------------------------------------------------------
+	if ( s.secsToWindow )
+	{
+		hh = s.secsToWindow / 3600;
+		mm = ( s.secsToWindow / 60 ) % 60;
+		ss = s.secsToWindow % 60;
+
+		// The window is a uint16_t, so hh <= 18. Clamp anyway: a corrupted
+		// stored value must not push a third digit into the next field.
+		if ( hh > 99 ) hh = 99;
+
+		DrawStringCentered( String_Next, 50 );
+
+		// Font 0x1F digits are 8px wide and colon 0xDD is 3px, so HH:MM:SS
+		// spans 54px and x=5 centres it. Same offsets as DrawTime().
+		DrawValue(  5, 62, hh, 0, 0x1F, 2 );
+		DrawImage( 21, 62, 0xDD );
+		DrawValue( 24, 62, mm, 0, 0x1F, 2 );
+		DrawImage( 40, 62, 0xDD );
+		DrawValue( 43, 62, ss, 0, 0x1F, 2 );
+	}
+
+	//---------------------------------------------------------------------
+	// Used / limit, e.g. "40/40". Both live from dataflash.
+	//---------------------------------------------------------------------
+	DrawStringCentered( String_Used, 86 );
+
+	// Built as one string and centred through GetStringWidth() rather than
+	// positioned by hand, because the digit glyphs differ between the two
+	// selectable fonts and only the font tables know how wide they are.
+	//
+	// Worst case is 5 digits + '/' + 5 digits + terminator = 12 bytes; both
+	// counters are uint16_t, so that bound is structural.
+	Value2Str( buf, s.used, 0, 0x0B, 0 );	// PLGetStatus() refreshes .used
+	for ( i = 0 ; buf[i] ; ++i ) ;			// from dataflash before returning
+	buf[i++] = 0xD6;						// '/'
+	Value2Str( &buf[i], dfPLMaxPuffs, 0, 0x0B, 0 );
+
+	DrawStringCentered( buf, 96 );
+
+	//---------------------------------------------------------------------
+	// Show-mode indicator: make non-enforcement visible instead of silent.
+	//
+	// This only reports the state latched at the last fire attempt. A
+	// fail-open build that is currently NOT enforcing will rarely raise
+	// this screen at all, precisely because it is not refusing anything,
+	// so this is a partial answer; a persistent indicator belongs on the
+	// main view and is deliberately not attempted here.
+	//---------------------------------------------------------------------
+	if ( dfPLFlags & PL_FLAG_SHOW_MODE )
+	{
+		if ( s.clockLossSeen )
+		{
+			// A clock loss rolled the window this power-on: the allowance
+			// was handed back without anyone choosing it.
+			DrawStringCentered( String_ClockLost, 112 );
+		}
+		else if ( !( dfPLFlags & PL_FLAG_FAIL_CLOSED ) )
+		{
+			DrawStringCentered( String_Open, 112 );
+		}
+	}
 }
 
 
