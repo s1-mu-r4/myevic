@@ -44,3 +44,34 @@ A passing build, ROM-size audit, ELF LOAD consistency and synthetic USB stack fr
 **Next test:** Reproduce fixed Ron7 original vs corrected source offline, then add reset/startup and memory-initialization invariants before proposing any new experimental firmware.
 
 **Current decision: HARDWARE CFW BOOT FAIL / STOCK RESTORE PASS / NEXT FLASH NO-GO.**
+
+## Offline forensic follow-up (2026-10-26, GitHub Actions #13)
+
+[GitHub Actions #13](https://github.com/s1-mu-r4/myevic/actions/runs/40241452939) compiled **both** the pinned original Ron7 `pufflimit` and current amended firmware in the same isolated ARM toolchain, without firmware upload or hardware access. A new source/ELF/raw-BIN audit checked the initial Cortex-M4 SP and reset vector against linker symbols and both startup RAM-init records against the exact embedded values.
+
+| Invariant | Original `pufflimit` | Current revised build |
+|---|---|---|
+| Decoded BIN | 100,456 B | 100,500 B |
+| Initial SP | `0x20003778` | `0x20003778` |
+| Initial PC (Thumb) | `0x000015CD` | `0x000015CD` |
+| Reset_Handler | `0x000015CC` | `0x000015CC` |
+| RAM copy size | `0x1A4` = 420 B | same |
+| SRAM zero-init size | `0x35D0` = 13,776 B | same |
+| RAMInitTable LMA | `0x18850` | `0x1887C` |
+| Startup static symbol/table checks | PASS | PASS |
+
+Both images have self-consistent symbols and RAM initialization table. This **rules out an obvious static reset-vector mismatch and a simple missing/wrong RAM init table** as an explanation. It does **not** demonstrate runtime execution, correctness of the clock tree, flash CONFIG settings, or any USB code path.
+
+### Earliest code paths before USB enumeration
+
+The source-level cold-start ordering in this fork is:
+
+1. `Reset_Handler` → `Startup` copies and clears RAM → `Main`.
+2. `Main` → `InitDevices` enables/awaits high-frequency crystal and sets clocks.
+3. `Main` → `InitVariables` → `InitDataFlash` → `FMCCheckConfig`. If CONFIG0/1 do not match, `FMCCheckConfig` can erase/write CONFIG and issue `SYS_ResetChip()`. The owner's starting CONFIG contents are unknown.
+4. `Main` → `InitHardware`. When the saved `x32off` flag is not set, this routine starts the low-frequency 32.768 kHz crystal and **waits for ready**.
+5. Only later does `InitHardware` call `InitUSB`; display setup and the ordinary main loop follow.
+
+Thus a reset loop or stalled clock readiness **before** `InitUSB` can yield a non-enumerating USB device even when the USB descriptor code is correct. This is a candidate mechanism **not a diagnosis**; there is no trace from this hardware proving how far the CPU reached.
+
+**Next priority:** source-only checks of boot-time CONFIG behavior, clock readiness/timeouts, and target hardware assumptions. Do not change the image or repeat flashing until a candidate fault is supported by evidence.
