@@ -89,4 +89,39 @@ print("USB stack frames:", {k:frames[k] for k in ("hidGetOutReport","SaveProfile
 print("ELF LOAD conflicts:",report["load_lma_conflicts"])
 print("NOTE: full call-chain ISR stack, USB behavior, recovery write remain NOT VERIFIED")
 PY
-echo 'OFFLINE BUILD ONLY: E115 first CFW boot failed; firmware must not be flashed.'
+
+echo "=== Patched source: Cortex-M startup consistency ==="
+python3 tests/e115/diagnose_boot_image.py \
+  "$TMP/build1/bin/myevic.elf" "$TMP/build1/bin/myevic_dec.bin"
+
+echo "=== Original Ron7 source: same-toolchain forensic comparison ==="
+mkdir -p "$TMP/upstream-original"
+git archive "$PINNED_RON7" | tar -x -C "$TMP/upstream-original"
+if (
+  cd "$TMP/upstream-original"
+  make clean
+  make -f Makefile -f "$TMP/map.mk" -j2 all
+) > "$TMP/upstream-build.log" 2>&1; then
+  python3 "$ROOT/tests/e115/diagnose_boot_image.py" \
+    "$TMP/upstream-original/bin/myevic.elf" \
+    "$TMP/upstream-original/bin/myevic_dec.bin"
+  sha256sum "$TMP/upstream-original/bin/myevic.bin"
+  python3 - "$TMP" <<'PY'
+from pathlib import Path
+import struct
+import sys
+base=Path(sys.argv[1])
+def vec(name):
+  raw=(base/name/"bin/myevic_dec.bin").read_bytes()
+  return {"bytes":len(raw),"initial_sp":hex(struct.unpack_from("<I",raw)[0]),
+          "initial_pc":hex(struct.unpack_from("<I",raw,4)[0])}
+print("Offline vector comparison:", {"upstream_original":vec("upstream-original"),
+                                      "patched":vec("build1")})
+print("Neither image is authorized for flashing")
+PY
+else
+  echo "UPSTREAM ORIGINAL BUILD FAILED IN THIS TOOLCHAIN (diagnostic only)"
+  tail -35 "$TMP/upstream-build.log"
+fi
+echo "OFFLINE ONLY — real E115 CFW boot FAIL; do not flash any candidate."
+
