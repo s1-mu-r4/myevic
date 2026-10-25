@@ -1,3 +1,10 @@
+> **This fork (`pufflimit` branch) adds a puff limiter to myevic: a rolling window of N puffs per period, a per-hour schedule, and a refusal screen with a countdown. It has NOT yet run on a device.**
+>
+> - Back up your DataFlash and check your box code before flashing anything.
+> - The limiter can only refuse to fire. Power regulation (`src/atomizer.c`) is unchanged.
+> - `bin/myevic.bin` is upstream's stock build, not the limiter. To try the limiter, build it from source.
+> - The Flappy Bird game is left out of the default build to free ROM; `make WITH_GAME=1` restores it and then the image no longer fits.
+
 ## **myevic**
 This is myevic Custom Firmware.
 
