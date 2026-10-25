@@ -1,3 +1,5 @@
+> **2026-10-26 REAL-DEVICE UPDATE:** First experimental CFW boot **FAILED** (unrecognized USB, no boot with battery); the owner **successfully restored stock firmware** using the + button with USB. [Incident details](E115_FIRST_FLASH_INCIDENT_20261026.md). **Do not flash the failed experimental BIN again.** Earlier planning-only recovery notes below refer to the pre-test evidence state.
+
 # E115 verification of Ron7 `pufflimit` (research only)
 
 **Upstream:** [wighawag/myevic](https://github.com/wighawag/myevic), branch `pufflimit`, fixed starting commit `08202453b54c2284df27c9f188f66c2b2fb0f92e`. This is a derivative under the upstream GPL-3.0 license. The original code history is retained.
@@ -17,7 +19,7 @@ The exact equivalent source changes were previously tested in a reproducible ARM
 
 ## Unverified and prohibited actions
 
-Physical-device startup, protective shutoff, puff counter behavior, interrupt-stack peaks, and stock-LDROM recovery **have not been validated**. The presence of a responsive LDROM does not establish a successful flash/restore path. No firmware binaries are committed, uploaded as release artifacts, or offered for installation.
+Physical-device CFW boot **FAILED**; one manufacturer-stock LDROM-mediated recovery **SUCCEEDED** by owner report. Protective shutoff, puff counter behavior and interrupt-stack peaks have not been verified. Successful stock restoration in this incident does not guarantee recovery for every failure mode. No firmware binaries are committed as releases. One previous experimental CI image was published before this real-device FAIL; further artifact publication is now disabled and the prior image must not be reused.
 
 **NO-GO for flashing.** No USB/HID device access, firing, CONFIG changes, SWD, or merge to the upstream branch is part of this research PR. Proceed to physical testing only after a separate safety and recovery review.
 
