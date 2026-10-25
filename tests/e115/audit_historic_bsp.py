@@ -7,6 +7,7 @@ any archive content, write devices, or publish binary artifacts.
 """
 from __future__ import annotations
 
+import argparse
 from collections import Counter
 from hashlib import sha256
 from pathlib import Path
@@ -39,12 +40,21 @@ def controlled_fetch():
 
 
 def main():
-    print("Official original package URL:", URL)
-    try:
-        raw = controlled_fetch()
-    except Exception as exc:
-        print("HISTORIC_ARCHIVE_NOT_RETRIEVED:", type(exc).__name__, str(exc)[:250])
-        return 0  # investigation inconclusive, NOT a successful source comparison
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--zip", type=Path, help="local original vendor archive (never uploaded)")
+    args = ap.parse_args()
+    if args.zip:
+        print("HISTORIC_BSP_INPUT_LOCAL", args.zip.name)
+        if args.zip.stat().st_size > MAX_DOWNLOAD:
+            raise ValueError("local archive exceeds controlled 90 MiB limit")
+        raw = args.zip.read_bytes()
+    else:
+        print("Official original package URL:", URL)
+        try:
+            raw = controlled_fetch()
+        except Exception as exc:
+            print("HISTORIC_ARCHIVE_NOT_RETRIEVED:", type(exc).__name__, str(exc)[:250])
+            return 0  # INCONCLUSIVE; a green workflow is NOT a diff PASS
     print("Archive bytes:", len(raw), "SHA256:", sha256(raw).hexdigest())
     if not zipfile.is_zipfile(io.BytesIO(raw)):
         print("HISTORIC_ARCHIVE_INVALID_OR_VENDOR_ERROR_PAGE")
