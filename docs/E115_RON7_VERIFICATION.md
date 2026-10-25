@@ -20,3 +20,9 @@ The exact equivalent source changes were previously tested in a reproducible ARM
 Physical-device startup, protective shutoff, puff counter behavior, interrupt-stack peaks, and stock-LDROM recovery **have not been validated**. The presence of a responsive LDROM does not establish a successful flash/restore path. No firmware binaries are committed, uploaded as release artifacts, or offered for installation.
 
 **NO-GO for flashing.** No USB/HID device access, firing, CONFIG changes, SWD, or merge to the upstream branch is part of this research PR. Proceed to physical testing only after a separate safety and recovery review.
+
+## Recovery and stock-firmware readiness
+
+See [`E115_RECOVERY_PREFLIGHT.md`](E115_RECOVERY_PREFLIGHT.md) for manufacturer-sourced USB recovery instructions, device-free stock V5.04 ZIP verification, and a precise accounting of what is still not known about proprietary LDROM writes. This document describes a **possible recovery path, not a guarantee**. Never connect the firmware updater merely to infer that its operations are read-only.
+
+A device-free checker is available as `python3 tests/e115/e115_stock_zip_audit.py /path/to/UpdateFirmware.zip`. The genuine stock ZIP is **not** stored in GitHub and must be obtained from the manufacturer. This preflight does not change the no-flash ruling.
