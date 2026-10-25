@@ -14,7 +14,11 @@ def describe(path: Path):
     blob = path.read_bytes()
     raw = decode(blob)
     sp, pc = struct.unpack_from("<II", raw)
-    e115 = raw.find(b"E115")
+    # A plain "E115" substring can occur in a UI list of products,
+    # e.g. "E115E196"; it is NOT a verified target product record.
+    specific_marker = b"E115\x01\x00\x01\x00"
+    e115 = raw.find(specific_marker)
+    ordinary_E115_offsets = [i for i in range(len(raw)-3) if raw[i:i+4] == b"E115"]
     joy = raw.find(b"Joyetech APROM")
     expected = (
         e115 >= 0 and 0x20000000 < sp <= 0x20008000
@@ -25,7 +29,8 @@ def describe(path: Path):
         "encrypted_sha256": hashlib.sha256(blob).hexdigest(),
         "decoded_sha256": hashlib.sha256(raw).hexdigest(),
         "vector_sp": f"0x{sp:08X}", "vector_pc": f"0x{pc:08X}",
-        "joyetech_aprom_offset": joy, "E115_offset": e115,
+        "joyetech_aprom_offset": joy, "E115_hw100_record_offset": e115,
+        "raw_E115_substring_offsets": ordinary_E115_offsets,
         "product_marker_following_bytes": raw[e115+4:e115+8].hex() if e115 >= 0 else None,
         "has_pufflimit_text": b"pufflimit" in raw.lower() or b"puff limit" in raw.lower(),
         "E115_vector_plausible_not_verified_hardware": expected,
