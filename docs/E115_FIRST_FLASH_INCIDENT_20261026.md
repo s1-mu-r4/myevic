@@ -13,11 +13,21 @@
 
 The screenshot, serial numbers, USB device-unique identifiers and physical firmware dumps are not copied into this public repository.
 
+### Desktop updater screenshots clarified by owner (2026-10-26)
+
+The owner supplied two additional screenshots from the same first-flash/recovery sequence. **Only the reported UI text is transcribed here; original screenshots, device-unique information, and Windows paths are not published.**
+
+1. **After experimental CFW upload:** Joyetech `Update Firmware 1.20` displayed a modal **"Firmware update completed."** with a full progress bar. In the background, the device was labelled **"eVic VTwo mini"** and `Firmware Version: 5.04`. The latter may be a cached pre-update firmware version; it is **not** evidence that the new CFW ever executed or that stock FW remained active.
+2. **After reconnecting with '+' held:** The same updater recognized **"eVic VTwo mini"**, `Firmware Version: 0.00`, `Hardware Version: 1.00`. This is consistent with the observed LDROM/recovery-mode response and with the later successful stock-firmware restoration. The zero firmware version does **not** prove APROM is empty or identify exactly how boot failed.
+
+**Revised diagnosis boundary:** The host updater did **not** present an in-process error in the supplied completion screenshot. The failure occurred **despite host-reported successful transfer**, followed by Windows USB non-recognition and no battery-powered startup. This prioritizes a post-transfer boot failure (or a mismatch between host completion and stored APROM bytes) over an obvious interrupted host update. Host success is not verified target Flash readback. Exact execution stop point remains unknown.
+
+
 ## Candidate fingerprint and evidence boundary
 
 The test artifact published for this experiment by [CI #7](https://github.com/s1-mu-r4/myevic/actions/runs/40239433860) was named `ron7-pufflimit-e115-EXPERIMENTAL.bin`, length **100,500 bytes**, SHA256 `db6c67b897da841119f868e7b745cac70d010addac5438172df3987ef74d4046`.
 
-**Owner-provided Windows PowerShell check (2026-10-26):** `Get-FileHash` of the locally retained `ron7-pufflimit-e115-EXPERIMENTAL.bin` returned SHA-256 `DB6C67B897DA841119F868E7B745CAC70D010ADDAC5438172DF3987EF74D4046`, **exactly matching the CI #7 artifact**. This rules out an altered or misidentified *local file*. The user's absolute Windows account path is intentionally omitted. The updater transaction log and independent readback of APROM have not been provided, so the exact bytes accepted/programmed by the device and the updater's full completion state are still not independently proven. Any CONFIG changes and updater errors remain unknown.
+**Owner-provided Windows PowerShell check (2026-10-26):** `Get-FileHash` of the locally retained `ron7-pufflimit-e115-EXPERIMENTAL.bin` returned SHA-256 `DB6C67B897DA841119F868E7B745CAC70D010ADDAC5438172DF3987EF74D4046`, **exactly matching the CI #7 artifact**. This rules out an altered or misidentified *local file*. The user's absolute Windows account path is intentionally omitted. The updater transaction log and independent readback of APROM have not been provided, so the exact bytes accepted/programmed by the device are still not independently proven. A subsequent screenshot confirms that the updater **reported firmware update completion without displaying an error**; see the UI-evidence section below. Actual CONFIG changes remain unknown.
 
 A passing build, ROM-size audit, ELF LOAD consistency and synthetic USB stack frame test do **not** establish ARM reset execution or hardware safety.
 
@@ -36,7 +46,7 @@ A passing build, ROM-size audit, ELF LOAD consistency and synthetic USB stack fr
 | Startup/vector/ROM layout | Display and battery startup failed, so failure may precede USB initialization | Decoded initial SP/PC, Reset_Handler branch, RAMInitTable triplets, section LMA, BSS and stack bounds |
 | DataFlash and CONFIG first boot | `InitDataFlash()` can call `FMCCheckConfig()`, which may change CONFIG and reset on mismatch | Source trace and target-state distinctions; **no new real CONFIG writes/read commands** |
 | Clock and USB setup | USB enumeration failed after the update | Determine whether CPU got as far as descriptor setup, or failed earlier |
-| Exact firmware/update transaction | Owner's local BIN hash now matches CI output exactly; APROM write/readback was not independently verified | Review any already-saved updater result/error details offline; no device writes |
+| Exact firmware/update transaction | Local BIN hash matches CI; host updater displayed 'Firmware update completed'; APROM write/readback was not independently verified | Inspect host updater success/verification semantics offline; no device writes |
 | Hardware compatibility and protection | Product marker E115 matches, but may not capture every electrical/hardware variant | Board-specific startup assumptions and firmware map; no power test |
 
 **Important:** Windows USB-unrecognized message is a symptom, not proof the USB descriptors or driver are defective. If firmware fails before USB starts, the same message is possible.
