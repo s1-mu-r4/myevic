@@ -129,5 +129,31 @@ else
   echo "UPSTREAM ORIGINAL BUILD FAILED IN THIS TOOLCHAIN (diagnostic only)"
   tail -35 "$TMP/upstream-build.log"
 fi
+echo "=== 2019 source + modern GCC compatibility patch (no limiter): control build ==="
+# a73cd679 is the compatibility-only commit, prior to adding pufflimit.
+# Compare this rebuilt 2019 source against the old, checked-in 2019 binary.
+mkdir -p "$TMP/modernized-2019"
+git archive a73cd6793542516425f40b1fe87c2ee68f2aec94 | tar -x -C "$TMP/modernized-2019"
+if (
+  cd "$TMP/modernized-2019"
+  make clean
+  make -f Makefile -f "$TMP/map.mk" -j2 all
+) > "$TMP/modernized-2019.log" 2>&1; then
+  echo "MODERNIZED_2019_BUILD_PASS"
+  python3 "$ROOT/tests/e115/diagnose_boot_image.py" \
+    "$TMP/modernized-2019/bin/myevic.elf" \
+    "$TMP/modernized-2019/bin/myevic_dec.bin"
+  python3 "$ROOT/tests/e115/compare_reference_images.py" \
+    "$TMP/shipped-ron7-myevic.bin" \
+    "$TMP/modernized-2019/bin/myevic.bin" \
+    "$TMP/upstream-original/bin/myevic.bin" \
+    "$TMP/build1/bin/myevic.bin"
+  arm-none-eabi-objdump -d "$TMP/modernized-2019/bin/myevic.elf" \
+    | sed -n '/<Reset_Handler>:/,+36p'
+else
+  echo "MODERNIZED_2019_BUILD_BLOCKED (diagnostic baseline, does not bypass patched-build checks)"
+  tail -35 "$TMP/modernized-2019.log"
+fi
 echo "OFFLINE ONLY — real E115 CFW boot FAIL; do not flash any candidate."
+
 
