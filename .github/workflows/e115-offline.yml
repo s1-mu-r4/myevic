@@ -23,3 +23,10 @@ jobs:
           persist-credentials: false
       - name: Verify reproducible offline build and ELF/stack invariants
         run: bash tests/e115/build_offline.sh
+      - name: Attach verified manual-use test image (one-day retention)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ron7-e115-testonly-100500B
+          path: .e115-manual-test/
+          retention-days: 1
+          if-no-files-found: error
