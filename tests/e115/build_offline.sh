@@ -112,7 +112,7 @@ assert b"E115\x01\x00\x01\x00" in clear, "E115 HW metadata missing"
 sp, reset = struct.unpack_from("<II", clear)
 assert 0x20000000 <= sp <= 0x20008000
 assert reset & 1 and (reset & ~1) < len(clear)
-out = root / ".e115-manual-test"
+out = root / "e115-manual-test"
 out.mkdir(exist_ok=True)
 name = "ron7-pufflimit-e115-EXPERIMENTAL.bin"
 (out/name).write_bytes(encrypted)
