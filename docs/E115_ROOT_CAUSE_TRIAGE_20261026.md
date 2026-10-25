@@ -30,6 +30,20 @@ All three binaries have a plausible Thumb reset vector and an exact E115/HW1.00 
 
 **Important test correction:** A naive `raw.find(b"E115")` also matches a product-name list `E115E196`, not the product record. The image audit now searches for the full eight-byte E115/HW1.00 sequence. Earlier reports of a generic E115 substring alone were insufficient.
 
+## Historical build-chain provenance (additional evidence)
+
+The Git history resolves a key ambiguity in the comparison table: the tracked 99,700-byte `bin/myevic.bin` was last changed in [upstream commit `546394bcf1`](https://github.com/wighawag/myevic/commit/546394bcf1ac9ab63381fa2fb484a0dfa11d443f) on **2019-10-29**. That binary is **the pre-limiter upstream artifact**, not an older successful build of the **2026 Ron7 puff-limit code**. The limiter was introduced in [`52ed217de`](https://github.com/wighawag/myevic/commit/52ed217de) on 2026-10-25. The earlier **2019 vs 2026 BIN mismatch was expected** even before compiler differences. Neither is known-good for this physical owner E115.
+
+The [modern build compatibility commit `a73cd679`](https://github.com/wighawag/myevic/commit/a73cd6793542516425f40b1fe87c2ee68f2aec94) (2026-10-25) was made *before* the limiter addition, and changed the build/library search, `-fcommon`, Thumb assembler annotation, and linker RAM-init layout. The historical source is **not semantically identical** to its reconstructed, modernized executable; every startup-related change requires independent inspection, regardless of a compile PASS.
+
+[CI #21](https://github.com/s1-mu-r4/myevic/actions/runs/40245001030) attempted the intermediate **2019 code + modern GCC compatibility patch** (`a73cd679`) using the current pinned GCC12.2.1/BSP environment. That control build **did NOT produce a BIN**: GNU ld reported `.raminit` ending at **0x19090**, 144 bytes beyond ROM end **0x19000**. The CI as a whole passed its mandatory **patched-Ron7** build and correctly recorded this optional historical control as **BLOCKED**; a successful CI job must not be misreported as success for the historical baseline. The 2019 baseline still includes Flappy Bird, whereas the 2026 limiter build excludes it by default, so ROM usage is not an apples-to-apples measurement.
+
+**New BSP-version discrepancy:** The original myevic [historical build guide](https://github.com/ClockSelect/myevic/blob/master/git_doc_en/howtobuild_en.md) gives **M451 Series BSP CMSIS V3.01.001** as its example SDK. The current reproducible runner pinned [OpenNuvoton/M451BSP `61f8103b`](https://github.com/OpenNuvoton/M451BSP/commit/61f8103bfe58ae8853affdba8a01dcc26e41079e), a **2018-02-23 update to V3.01.003**. This is more than a compiler-version change; the peripheral and clock drivers may differ. Archived [2015 V3.01.001 package information](https://forum.nuvoton.com/en/numicro-cortex-m4-mcu/general-discussion/129) exists, but a known-source **V3.01.001 Library** has **not** yet been verified and compared to the pinned V3.01.003 code. The original maintainer also gave `GNUARMEmbedded/5.3.2016q1` as an **example installed toolchain path**, not proof of the exact compiler that produced the old binary ([issue #168](https://github.com/ClockSelect/myevic/issues/168)).
+
+**Evidence-based next step:** Obtain verifiable archived BSP V3.01.001 source (and toolchain provenance), then run a controlled **source-level clk/fmc/usbd/sys diff** and, only if suitable, a device-free historical build. Record archive SHA256 and all warnings. Do **not** change the owner's CONFIG or flash any "historical" artifact to test the hypothesis.
+
+---
+
 ## Firmware cold-start gates before USB descriptors
 
 These are direct source paths, each of which could fail without Windows receiving a valid USB descriptor:
@@ -44,7 +58,7 @@ These are direct source paths, each of which could fail without Windows receivin
 
 | Priority | Candidate | Why | Safe resolution/evidence |
 |---|---|---|---|
-| P1 | **Built source ≠ shipped Ron7 BIN; toolchain, BSP and layout evolution** | Definitively different 99,700 vs 100,456/100,500B images and reset vectors, without any tested good control on owned unit | Reconstruct original historical compiler/BSP from upstream documentation; compare *semantic* call sites, startup code and instructions with shipped image. No firmware installation |
+| P1 | **2019-vs-2026 source and build-chain divergence** | 2019 distributed BIN predates the 2026 limiter; modern-port intermediate overflows ROM by 144B; pinned 2018 BSP V3.01.003 differs from historical V3.01.001 example | Reconstruct historically authentic SDK/compiler, isolate each independent change and compare clock/FMC/USB driver contracts and startup instructions. No firmware installation |
 | P1 | **LDROM model-ID scan fallback** | Reaches `ResetToLDROM()` before `InitUSB()` when marker lookup fails | Analyze exact E115 loader identifier format/source and scanner. If no safe device read exists, label unresolved. Never infer it from APROM string |
 | P1 | **First-start CONFIG/DFBA reset and retained device settings** | May change boot/data mapping and reset before any UI/USB | Prove CONFIG conditional paths symbolically, and compare expected stock settings from public documentation. No blind CONFIG repair or reset on owner device |
 | P2 | **Clock readiness and MCU peripheral initialization** | Clock-ready result is ignored by part of `InitDevices`; USB cannot function with broken clocks | Host simulate timeout/error branches and check safe failure policy; no powered device testing until a supported alternative exists |
