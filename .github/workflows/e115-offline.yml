@@ -1,0 +1,26 @@
+name: Ron7 E115 offline build audit
+on:
+  push:
+    branches: ["verify/ron7-e115-minimal-fixes"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+    steps:
+      - name: Install ARM GCC and local test dependencies
+        run: |
+          apt-get update -qq
+          apt-get install -y --no-install-recommends ca-certificates git make build-essential gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi python3 python3-venv python3-pip
+      - name: Checkout Ron7-derived research branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify reproducible offline build and ELF/stack invariants
+        run: bash tests/e115/build_offline.sh
+      # Following real E115 CFW boot failure, publishing BIN artifacts is disabled.

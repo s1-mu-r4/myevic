@@ -73,7 +73,7 @@ SECTIONS {
 
 	Data_Size = Data_End_RAM - Data_Start_RAM;
 
-	.sram : {
+	.sram (NOLOAD) : {
 		SRAMZ_Start = .;
 
 		. = ALIGN(4);

@@ -442,10 +442,7 @@ sqrtul:
 		.thumb_func
 
 GetFirmwareSize:
-		ldr		r2, =RAMInitTable
-		ldr		r0, [r2]
-		ldr		r1, [r2, #8]
-		add		r0, r1
+		ldr		r0, =RAMInitEnd
 		bx		lr
 		
 		.balign	4,0

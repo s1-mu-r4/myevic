@@ -1020,7 +1020,10 @@ __myevic__ uint32_t hidFMCReadCmd( CMD_T *pCmd )
 
 	myprintf( "FMC Read command - Start Addr: %d    Param Len: %d\n", pCmd->u32Arg1, pCmd->u32Arg2 );
 
-	if ( ! u32ParamLen % EP2_MAX_PKT_SIZE )
+	if ( u32ParamLen == 0 ||
+	     ( u32ParamLen % EP2_MAX_PKT_SIZE ) != 0 ||
+	     ( u32StartAddr & 3U ) != 0 ||
+	     u32StartAddr > ( 0xFFFFFFFFU - u32ParamLen ) )
 	{
 		return -1;
 	}
@@ -1193,6 +1196,30 @@ int32_t hidProcessCommand( uint8_t *pu8Buffer, uint32_t u32BufferLen )
 }
 
 
+/*
+ * Make the USB SETPROFILE 2KiB scratch frame non-nested with SaveProfile().
+ * Both were allocated in hidGetOutReport()'s stack while SaveProfile() runs.
+ * Keep the scratch buffer local to this noinline helper, not shared by ISRs.
+ */
+__myevic__ __attribute__((noinline)) static void hidWriteStoredProfile( dfParams_t *p )
+{
+	uint8_t page[FMC_FLASH_PAGE_SIZE] __attribute__((aligned(4)));
+	uint32_t offset = p->Profile * DATAFLASH_PARAMS_SIZE;
+
+	MemCpy( page, (void*)DATAFLASH_PROFILES_BASE, FMC_FLASH_PAGE_SIZE );
+	MemCpy( page + offset, p, DATAFLASH_PARAMS_SIZE );
+
+	SYS_UnlockReg();
+	FMC_ENABLE_ISP();
+	FMC_ENABLE_AP_UPDATE();
+
+	FMCEraseWritePage( DATAFLASH_PROFILES_BASE, (uint32_t*)page );
+
+	FMC_DISABLE_AP_UPDATE();
+	FMC_DISABLE_ISP();
+	SYS_LockReg();
+}
+
 //----- (00002788) --------------------------------------------------------
 __myevic__ void hidGetOutReport( uint8_t *pu8Buffer, uint32_t u32BufferLen )
 {
@@ -1256,22 +1283,7 @@ __myevic__ void hidGetOutReport( uint8_t *pu8Buffer, uint32_t u32BufferLen )
 					p->Profile = u32StartAddr - 1;
 					p->PCRC = CalcPageCRC( (uint32_t*)p );
 
-					uint8_t page[FMC_FLASH_PAGE_SIZE] __attribute__((aligned(4)));
-
-					uint32_t offset = p->Profile * DATAFLASH_PARAMS_SIZE;
-
-					MemCpy( page, (void*)DATAFLASH_PROFILES_BASE, FMC_FLASH_PAGE_SIZE );
-					MemCpy( page + offset, p, DATAFLASH_PARAMS_SIZE );
-
-					SYS_UnlockReg();
-					FMC_ENABLE_ISP();
-					FMC_ENABLE_AP_UPDATE();
-
-					FMCEraseWritePage( DATAFLASH_PROFILES_BASE, (uint32_t*)page );
-
-					FMC_DISABLE_AP_UPDATE();
-					FMC_DISABLE_ISP();
-					SYS_LockReg();
+					hidWriteStoredProfile( p );
 				}
 
 				myprintf( "Set Profile command complete.\n" );
