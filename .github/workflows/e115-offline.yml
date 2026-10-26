@@ -66,6 +66,8 @@ jobs:
           echo "=== GCC6 UPSTREAM CONTROL ==="
           if bash build-gcc6.sh --upstream > "$RUNNER_TEMP/gcc6-upstream.log" 2>&1; then
             tail -6 "$RUNNER_TEMP/gcc6-upstream.log"
+            mkdir -p "$RUNNER_TEMP/gcc6-control"
+            cp build/upstream/myevic.bin build/upstream/myevic_dec.bin "$RUNNER_TEMP/gcc6-control/"
           else
             echo "::warning::GCC6 upstream control blocked"
             tail -60 "$RUNNER_TEMP/gcc6-upstream.log"
@@ -84,7 +86,7 @@ jobs:
           import hashlib,struct
           from pathlib import Path
           for key in ("upstream","limiter"):
-              d=Path("build/upstream" if key=="upstream" else "build")
+              d=Path(__import__("os").environ["RUNNER_TEMP"])/"gcc6-control" if key=="upstream" else Path("build")
               raw=(d/"myevic_dec.bin").read_bytes()
               enc=(d/"myevic.bin").read_bytes()
               sp,pc=struct.unpack_from("<II",raw)
