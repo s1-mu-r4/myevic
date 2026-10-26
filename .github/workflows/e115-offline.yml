@@ -48,7 +48,7 @@ jobs:
       - name: Install isolated pinned evic conversion packages
         run: |
           python3 -m venv "$RUNNER_TEMP/evic-venv"
-          "$RUNNER_TEMP/evic-venv/bin/pip" -q install binstruct==1.0.1 bitarray==3.12.3 click==8.5.0 pillow==13.0.0
+          "$RUNNER_TEMP/evic-venv/bin/pip" -q install binstruct==1.0.1 bitarray==3.12.3 click==8.5.0 pillow==11.3.0
           mkdir -p "$RUNNER_TEMP/evic-tools"
           cat > "$RUNNER_TEMP/evic-tools/evic" <<'EOF'
           #!/usr/bin/env bash
