@@ -23,7 +23,7 @@ Full, source-linked evidence: [`E115_FIRST_FLASH_INCIDENT_20261026.md`](E115_FIR
 ### Important correction to earlier hypotheses
 
 - The tracked **99,700B `bin/myevic.bin` is a 2019 upstream build**, predating the limiter introduced on **2026-10-25**. It is **not** a previously working Ron7 limiter binary, and different vectors/size are not proof of a defect.
-- The upstream [Ron7 `pufflimit` README](https://github.com/wighawag/myevic/tree/pufflimit) explicitly says **"It has NOT yet run on a device."** There is currently **no confirmed working limiter baseline** in the public branch. This makes a device-specific E115 diagnosis premature.
+- The upstream [Ron7 `pufflimit` README](https://github.com/wighawag/myevic/tree/pufflimit) explicitly says **"It has NOT yet run on a device."** In a prior E-Cigarette Forum exchange on 2026-10-24, Ron7 also said **he had not obtained an eVic**, and asked the owner to test an E115. Thus his lack of an earlier hardware run is **already answered**, and he should not be asked the same question again. No other confirmed working limiter baseline has been provided. This makes an E115-specific diagnosis premature.
 - Eight cold-start C function bodies, including `InitDevices`, `InitDataFlash`, `FMCCheckConfig`, `SetProductID`, `InitHardware`, `InitUSB` and `Main`, matched the 2019 upstream source. Yet compiled machine code, initial settings, BSP driver behavior and physical device state may differ.
 - **CONFIG/LDROM are competing unconfirmed paths:** `FMCCheckConfig` can erase/rewrite CONFIG and reboot if DFEN/DFBA differ; `SetProductID` scans **actual physical LDROM** and calls `ResetToLDROM` if it finds no supported model ID. The E115 string in the **APROM file** does not prove the LDROM scan succeeded.
 - The official archived Nuvoton **BSP v3.01.001** was **not obtained** (29B error response); the runner uses pinned **v3.01.003**. Do not call the older BSP differential a PASS. Further repetitive archive polling is suspended.
@@ -32,7 +32,7 @@ Full, source-linked evidence: [`E115_FIRST_FLASH_INCIDENT_20261026.md`](E115_FIR
 
 **Question A — Is there any actual known-good hardware run of this exact Ron7 limiter branch?**
 
-Check evidence from Ron7 (or another tester) for: hardware model + HW revision; the exact firmware source commit and SHA of the BIN flashed; build toolchain/BSP; whether the device reached its menu and USB; any boot failures or fixes. The public README currently states **untested**. If there are **no controlled successful reports**, classify the feature as **generally unqualified on hardware**, not an E115-only failure. Do not manufacture a “known good” control from the 2019 old binary.
+Ron7 already confirmed in the October 24 E-Cigarette Forum exchange that his own implementation was untested and he did not have an eVic. **Do not repeat that question.** Report this first owner E115 result to Ron7 via the existing forum thread, with host completion, no boot, +/USB stock recovery, and local SHA256 match. Ask whether **another tester** has since obtained a working result or whether he sees a specific first-boot mechanism to prioritize. Require model/HW, exact source/BIN and build toolchain for any asserted success. Without such evidence, classify the feature as **generally unqualified on hardware**, not an E115-specific incompatibility.
 
 **Question B — What does the updater's "Firmware update completed" acknowledge, and where could APROM stop before USB enumeration?**
 
