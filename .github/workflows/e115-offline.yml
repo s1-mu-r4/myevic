@@ -24,28 +24,3 @@ jobs:
       - name: Verify reproducible offline build and ELF/stack invariants
         run: bash tests/e115/build_offline.sh
       # Following real E115 CFW boot failure, publishing BIN artifacts is disabled.
-
-  historical-bsp:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    container:
-      image: debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
-    steps:
-      - name: Install source comparison prerequisites
-        run: |
-          apt-get update -qq
-          apt-get install -y --no-install-recommends ca-certificates git python3
-      - name: Checkout research branch without credentials
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Checkout immutable 2018 Nuvoton M451 BSP
-        run: |
-          git clone -q https://github.com/OpenNuvoton/M451BSP.git /tmp/m451-2018
-          git -C /tmp/m451-2018 checkout -q --detach 61f8103bfe58ae8853affdba8a01dcc26e41079e
-          test "$(git -C /tmp/m451-2018 rev-parse HEAD)" = "61f8103bfe58ae8853affdba8a01dcc26e41079e"
-      - name: Compare archived official M451 3.01.001 vs pinned 3.01.003 (read-only)
-        env:
-          BSP_CHECKOUT: /tmp/m451-2018
-        run: python3 tests/e115/audit_historic_bsp.py
-      # No compiled firmware produced by this job, and no artifacts uploaded.

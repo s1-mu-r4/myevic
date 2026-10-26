@@ -1,30 +1,53 @@
-> **2026-10-26 REAL-DEVICE UPDATE:** First experimental CFW boot **FAILED** (unrecognized USB, no boot with battery); the owner **successfully restored stock firmware** using the + button with USB. [Incident details](E115_FIRST_FLASH_INCIDENT_20261026.md). **Do not flash the failed experimental BIN again.** Earlier planning-only recovery notes below refer to the pre-test evidence state.
+# E115 first-boot research — current decision and bounded plan
 
-# E115 verification of Ron7 `pufflimit` (research only)
+**State:** **STOP / NO-GO for experimental CFW reflash** · **Last reviewed:** 2026-10-26 (JST).
+**Scope:** Evaluate **Ron7's existing `pufflimit`**, not develop new limiter features. This Draft PR is a **research record, not a merge candidate**.
 
-**Upstream:** [wighawag/myevic](https://github.com/wighawag/myevic), branch `pufflimit`, fixed starting commit `08202453b54c2284df27c9f188f66c2b2fb0f92e`. This is a derivative under the upstream GPL-3.0 license. The original code history is retained.
+## One-screen status
 
-**Target:** Joyetech eVic VTwo Mini (E115, hardware 1.00). The objective is to determine whether Ron7's *existing* firmware and puff count limit can safely be tested on a physical E115. No new scheduling, usage-budget or logging features are introduced.
+| Subject | State |
+|---|---|
+| Device | eVic VTwo Mini, E115/HW 1.00 |
+| Exact downloaded test image | SHA256 independently matched CI output; 100,500B |
+| Desktop update | Reported `Firmware update completed` |
+| Experimental firmware | **FAILED** to boot; USB not recognized |
+| Manufacturer stock restore | **SUCCEEDED** after +/USB recovery entry |
+| First-stage CPU execution and APROM readback | **UNKNOWN** |
+| Root cause | **UNKNOWN** |
+| CI | Offline/static checks **PASS**; **never a device qualification** |
+| Branches | Keep `pufflimit` and `master` unmodified |
+| Executable firmware artifacts | No new publishing or user-device writes |
 
-## Minimal changes under review
+Full, source-linked evidence: [`E115_FIRST_FLASH_INCIDENT_20261026.md`](E115_FIRST_FLASH_INCIDENT_20261026.md).
 
-- `src/meusbd.c`: Isolate the USB SETPROFILE scratch page in a non-inlined helper, preventing it from coexisting in the same call stack with `SaveProfile()`'s separate 2 KiB scratch page.
-- `linker.ld`: Mark the SRAM initialization area `NOLOAD`, eliminating a conflicting file-backed LOAD region.
-- `src/myevic.s`: Include the complete RAM initialization table in the virtual firmware-file size.
-- `src/meusbd.c`: Reject invalid FMCREAD lengths, unaligned addresses and arithmetic overflow.
+### Important correction to earlier hypotheses
 
-## Prior controlled test result
+- The tracked **99,700B `bin/myevic.bin` is a 2019 upstream build**, predating the limiter introduced on **2026-10-25**. It is **not** a previously working Ron7 limiter binary, and different vectors/size are not proof of a defect.
+- The upstream [Ron7 `pufflimit` README](https://github.com/wighawag/myevic/tree/pufflimit) explicitly says **"It has NOT yet run on a device."** There is currently **no confirmed working limiter baseline** in the public branch. This makes a device-specific E115 diagnosis premature.
+- Eight cold-start C function bodies, including `InitDevices`, `InitDataFlash`, `FMCCheckConfig`, `SetProductID`, `InitHardware`, `InitUSB` and `Main`, matched the 2019 upstream source. Yet compiled machine code, initial settings, BSP driver behavior and physical device state may differ.
+- **CONFIG/LDROM are competing unconfirmed paths:** `FMCCheckConfig` can erase/rewrite CONFIG and reboot if DFEN/DFBA differ; `SetProductID` scans **actual physical LDROM** and calls `ResetToLDROM` if it finds no supported model ID. The E115 string in the **APROM file** does not prove the LDROM scan succeeded.
+- The official archived Nuvoton **BSP v3.01.001** was **not obtained** (29B error response); the runner uses pinned **v3.01.003**. Do not call the older BSP differential a PASS. Further repetitive archive polling is suspended.
 
-The exact equivalent source changes were previously tested in a reproducible ARM GCC 12.2.1 offline build. Two clean builds gave identical ELF, raw BIN and converted BIN. The resulting image was **100,500 bytes** (1,900 bytes below the linker ROM limit); the identified USB function-stack pairs were 2,144 and 2,136 bytes, and there were no conflicting ELF LOAD bytes. The ROM size is **not** proof of firmware safety. The tests under `tests/e115` repeat the build and source/ELF checks inside this fork.
+## Fixed work plan: two questions, then a stop/go decision
 
-## Unverified and prohibited actions
+**Question A — Is there any actual known-good hardware run of this exact Ron7 limiter branch?**
 
-Physical-device CFW boot **FAILED**; one manufacturer-stock LDROM-mediated recovery **SUCCEEDED** by owner report. Protective shutoff, puff counter behavior and interrupt-stack peaks have not been verified. Successful stock restoration in this incident does not guarantee recovery for every failure mode. No firmware binaries are committed as releases. One previous experimental CI image was published before this real-device FAIL; further artifact publication is now disabled and the prior image must not be reused.
+Check evidence from Ron7 (or another tester) for: hardware model + HW revision; the exact firmware source commit and SHA of the BIN flashed; build toolchain/BSP; whether the device reached its menu and USB; any boot failures or fixes. The public README currently states **untested**. If there are **no controlled successful reports**, classify the feature as **generally unqualified on hardware**, not an E115-only failure. Do not manufacture a “known good” control from the 2019 old binary.
 
-**NO-GO for flashing.** No USB/HID device access, firing, CONFIG changes, SWD, or merge to the upstream branch is part of this research PR. Proceed to physical testing only after a separate safety and recovery review.
+**Question B — What does the updater's "Firmware update completed" acknowledge, and where could APROM stop before USB enumeration?**
 
-## Recovery and stock-firmware readiness
+Use **source/offline analysis only** to determine whether the host received a transport ACK, final-write ACK, readback verification or something else. Then review just the pre-USB `Reset_Handler → InitDevices → InitDataFlash (CONFIG, LDROM ID) → InitHardware → InitUSB` boundary. Seek *one discriminating signature* that separates host-success/actual-image failure from first-boot reset/diversion; do not proliferate test matrices or papers.
 
-See [`E115_RECOVERY_PREFLIGHT.md`](E115_RECOVERY_PREFLIGHT.md) for manufacturer-sourced USB recovery instructions, device-free stock V5.04 ZIP verification, and a precise accounting of what is still not known about proprietary LDROM writes. This document describes a **possible recovery path, not a guarantee**. Never connect the firmware updater merely to infer that its operations are read-only.
+**Gate:** After A and B, provide a compact choice:
+1. **GO for offline patch review only** if a concrete, reproducible cause is supported and the patch has an identifiable acceptance test; **still no physical reflashing** without separately accepting device risk and reviewing the exact new candidate.
+2. **STOP/ARCHIVE** if evidence cannot separate causes without another hardware readback or a known-good device. Consider a separate expendable verified-compatible unit, or change approach. Do not continue generic v3.01.001 hunting or incrementally author new reports.
 
-A device-free checker is available as `python3 tests/e115/e115_stock_zip_audit.py /path/to/UpdateFirmware.zip`. The genuine stock ZIP is **not** stored in GitHub and must be obtained from the manufacturer. This preflight does not change the no-flash ruling.
+## Repository discipline
+
+- **Two live documents only:** this decision file + the linked incident evidence. Historical details are preserved in earlier [Git tree](https://github.com/s1-mu-r4/myevic/tree/5266feea7f2521170e1ea91271df40f8b13a0e35/docs) and CI logs.
+- No new Markdown reports, variants of build scripts, fresh hypotheses or test cases unless one of the two questions demonstrably needs it to change the decision.
+- Disable the repeated failing `historical-bsp` CI job and the optional 2019 modernized control build (known to exceed ROM by 144B). Preserve mandatory reproducible ARM build, static consistency tests and original-vs-patched comparison.
+- Do not merge or force-push, send USB/HID commands, disassemble hardware, use SWD/Nu-Link, or publish installable BINs.
+- Progress = a hypothesis eliminated by **new discriminating evidence**, a supported and reviewed minimal patch, or an independently observed hardware outcome. **Green test counts are not root-cause progress.**
+
+**Current decision remains: STOP / preserve the owner's restored stock firmware.**
