@@ -28,6 +28,28 @@ Full, source-linked evidence: [`E115_FIRST_FLASH_INCIDENT_20261026.md`](E115_FIR
 - **CONFIG/LDROM are competing unconfirmed paths:** `FMCCheckConfig` can erase/rewrite CONFIG and reboot if DFEN/DFBA differ; `SetProductID` scans **actual physical LDROM** and calls `ResetToLDROM` if it finds no supported model ID. The E115 string in the **APROM file** does not prove the LDROM scan succeeded.
 - The official archived Nuvoton **BSP v3.01.001** was **not obtained** (29B error response); the runner uses pinned **v3.01.003**. Do not call the older BSP differential a PASS. Further repetitive archive polling is suspended.
 
+
+## Bounded Ron7 GCC6 comparison (2026-10-26)
+
+Ron7 replied to the owner's first E115 FAIL report and published [`pufflimit-gcc6` commit `3405ec82`](https://github.com/wighawag/myevic/commit/3405ec82dfbf61a190740ee0cc4f6be9e6552ba1) (2026-10-26). He confirmed **no other limiter test device had booted**, and suspects toolchain modernization. This branch starts anew from the 2019 upstream source; it is **not a patch stacked atop the existing current-GCC `pufflimit` branch**.
+
+**Direct GitHub file blob audit:** `src/pufflimit.c`, `inc/pufflimit.h`, `src/dataflash.c`, and `src/main.c` are byte-identical between the GCC6 branch, the existing `pufflimit` branch and this E115 experiment. The GCC6 branch instead uses the **unchanged original** `linker.ld`, `src/myevic.s` and `src/meusbd.c`; it does **not** carry this fork's USB scratch-stack separation, FMCREAD validation or SRAM LOAD/no-overlap patches. An older build is not intrinsically safer for hardware.
+
+[One-off CI #34](https://github.com/s1-mu-r4/myevic/actions/runs/40315356577) executed Ron7's `build-gcc6.sh` at that immutable source commit, with the script's verified ARM GCC **6.3.1 (2017-q2)**, the **same pinned M451 BSP v3.01.003**, and the pinned `python-evic` converter. Both paths built, with no BIN artifact published or physical operation:
+
+| GCC6 path | image size | free under 102400B | initial SP | Thumb PC | SHA256 of converter BIN |
+|---|---:|---:|---|---|---|
+| `--upstream` old myevic | **99,696B** | 2,704B | `0x20003788` | `0x15F9` | `9781129af956933c38b042eb2c1ff76b8cff3bfd39362ae2208032d43ed2bd27` |
+| `pufflimit-gcc6` | **97,536B** | 4,864B | `0x20003760` | `0x15F9` | `c1e5a8484bcb05e9c18b8f036cf67efc87e7a3e6cd6d1ae8047f762665256bf2` |
+
+**Interpretation:** Both 2017-GCC images stay within the explicit 100KiB ROM budget and have plausible Cortex-M4 vectors. This is a **working offline A/B control**, but neither BIN has been shown to boot on the owner's E115, and matching reset-vector addresses do not prove matching startup instructions, loader behavior or runtime safety.
+
+**Narrow source caveat:** Ron7's statement that all limiter code runs *only* on FIRE is not literally true: `DFCheckValuesValidity()` calls `PLValidate()` during `InitDataFlash()`, and `ResetDataFlash()` invokes `PLResetDefaults()` before a settings write, **before** `InitUSB()`. The actual FIRE gate is indeed called at firing time. There is **no evidence** these startup validation/default routines caused this boot failure, but they should not be excluded categorically from a first-boot review.
+
+**Decision:** Do **not** flash either GCC6 image now. The next useful discriminator is a source/ELF audit of the *old* GCC6 startup, CONFIG and USB/stack constraints and a discussion with Ron7 about the **pre-USB PLValidate/PLResetDefaults** paths. If an expendable device or explicit new risk-approved physical trial is considered later, apply a separately reviewed safety gate. No multi-step physical flashing without separate authorization.
+
+The one-off GCC6 CI job was removed after its result was logged so it will not run on every future documentation change. The mandatory offline research job remains.
+
 ## Fixed work plan: two questions, then a stop/go decision
 
 **Question A — Is there any actual known-good hardware run of this exact Ron7 limiter branch?**

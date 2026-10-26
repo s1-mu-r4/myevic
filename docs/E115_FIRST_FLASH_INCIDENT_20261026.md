@@ -28,6 +28,8 @@ The stock ZIP itself is not distributed in this repository.
 | [Actions #28](https://github.com/s1-mu-r4/myevic/actions/runs/40247058812) | 20 Python tests including seven source-bound mock CONFIG/LDROM branch cases; main ARM build passes | Models code logic only. Physical CONFIG, LDROM bytes and branches remain unknown |
 | [Actions #29](https://github.com/s1-mu-r4/myevic/actions/runs/40247164752) | Latest frozen-source offline CI passed | Hardware remains CFW BOOT FAIL |
 
+| [Actions #34](https://github.com/s1-mu-r4/myevic/actions/runs/40315356577) | Ron7 GCC6.3.1: `--upstream` 99,696B and `pufflimit-gcc6` 97,536B built; Thumb reset vector plausible in both | Build-only comparison; neither GCC6 BIN has booted on the owner's E115; no artifact published |
+
 ## What an updater success message does NOT prove
 
 `Firmware update completed` is **host-interface evidence**, not verified APROM readback. The user's specific transaction may have (a) stored the image but failed at boot; (b) reported host transfer completion without verifiable target storage; or (c) experienced a device-specific boot/configuration branch. No available log separates these at present.
