@@ -24,3 +24,73 @@ jobs:
       - name: Verify reproducible offline build and ELF/stack invariants
         run: bash tests/e115/build_offline.sh
       # Following real E115 CFW boot failure, publishing BIN artifacts is disabled.
+
+  # Bounded one-off comparison: original myevic vs Ron7's new GCC6 branch.
+  # No source mutation, device communication or firmware artifact publishing.
+  gcc6-compare:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 24
+    steps:
+      - name: Install isolated source-build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends git curl make python3 python3-venv python3-pip libncurses5
+      - name: Clone and pin exact Ron7 gcc6 source, BSP and converter
+        run: |
+          git clone -q https://github.com/wighawag/myevic.git "$RUNNER_TEMP/ron7-gcc6"
+          git -C "$RUNNER_TEMP/ron7-gcc6" checkout -q --detach 3405ec82dfbf61a190740ee0cc4f6be9e6552ba1
+          test "$(git -C "$RUNNER_TEMP/ron7-gcc6" rev-parse HEAD)" = 3405ec82dfbf61a190740ee0cc4f6be9e6552ba1
+          git clone -q https://github.com/OpenNuvoton/M451BSP.git "$RUNNER_TEMP/nuvoton-sdk"
+          git -C "$RUNNER_TEMP/nuvoton-sdk" checkout -q --detach 61f8103bfe58ae8853affdba8a01dcc26e41079e
+          ln -s "$RUNNER_TEMP/nuvoton-sdk" "$RUNNER_TEMP/ron7-gcc6/nuvoton-sdk"
+          git clone -q https://github.com/ClockSelect/python-evic.git "$RUNNER_TEMP/python-evic"
+          git -C "$RUNNER_TEMP/python-evic" checkout -q --detach ef62fa601fd9b25d6261fdddf984cba462229b2b
+      - name: Install isolated pinned evic conversion packages
+        run: |
+          python3 -m venv "$RUNNER_TEMP/evic-venv"
+          "$RUNNER_TEMP/evic-venv/bin/pip" -q install binstruct==1.0.1 bitarray==3.12.3 click==8.5.0 pillow==13.0.0
+          mkdir -p "$RUNNER_TEMP/evic-tools"
+          cat > "$RUNNER_TEMP/evic-tools/evic" <<'EOF'
+          #!/usr/bin/env bash
+          exec python3 -c 'from evic.cli import main; main()' "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/evic-tools/evic"
+      - name: Compare old-GCC upstream and limiter builds offline only
+        env:
+          XDG_CACHE_HOME: ${{ runner.temp }}/toolchain-cache
+        run: |
+          set -euo pipefail
+          export PATH="$RUNNER_TEMP/evic-tools:$RUNNER_TEMP/evic-venv/bin:$PATH"
+          export PYTHONPATH="$RUNNER_TEMP/python-evic"
+          cd "$RUNNER_TEMP/ron7-gcc6"
+          echo "=== GCC6 UPSTREAM CONTROL ==="
+          if bash build-gcc6.sh --upstream > "$RUNNER_TEMP/gcc6-upstream.log" 2>&1; then
+            tail -6 "$RUNNER_TEMP/gcc6-upstream.log"
+          else
+            echo "::warning::GCC6 upstream control blocked"
+            tail -60 "$RUNNER_TEMP/gcc6-upstream.log"
+            exit 1
+          fi
+          echo "=== GCC6 RON7 LIMITER ==="
+          if bash build-gcc6.sh > "$RUNNER_TEMP/gcc6-limiter.log" 2>&1; then
+            tail -6 "$RUNNER_TEMP/gcc6-limiter.log"
+          else
+            echo "::warning::GCC6 limiter build blocked"
+            tail -60 "$RUNNER_TEMP/gcc6-limiter.log"
+            exit 1
+          fi
+          echo "=== Decoded images and vectors (NO flashing) ==="
+          python3 - <<'PY'
+          import hashlib,struct
+          from pathlib import Path
+          for key in ("upstream","limiter"):
+              d=Path("build/upstream" if key=="upstream" else "build")
+              raw=(d/"myevic_dec.bin").read_bytes()
+              enc=(d/"myevic.bin").read_bytes()
+              sp,pc=struct.unpack_from("<II",raw)
+              ok=0x20000000<sp<=0x20008000 and (pc&1) and (pc&~1)<len(raw)
+              print(key, "length",len(raw), "SHA256",hashlib.sha256(enc).hexdigest(),
+                    "SP",hex(sp),"PC",hex(pc),"vector_plausible",bool(ok))
+              assert ok and len(raw)<=102400, "Unsafe vector/size, no artifact"
+          PY
+          echo "=== COMPARE DONE; BIN output is runner-local, never uploaded ==="
